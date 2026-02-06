@@ -12,11 +12,12 @@ export default function LoginPage() {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
 
-    const { data } = await supabase.auth.getUser();
+    const { data, error } = await supabase.auth.getUser();
     const user = data.user;
-    if (!user) return;
 
-    // Create profile row if missing
+    if (error || !user) return;
+
+    // create if missing
     await supabase.from("profiles").upsert({
       id: user.id,
       full_name: null,
@@ -29,12 +30,9 @@ export default function LoginPage() {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
     });
 
     if (error) {
@@ -42,7 +40,15 @@ export default function LoginPage() {
       return;
     }
 
-    setStatus("✅ Signed up! Check your email to confirm.");
+    // If email confirmation is OFF, user is already logged in here
+    if (data.session) {
+      await ensureProfile();
+      window.location.href = "/events";
+      return;
+    }
+
+    // If email confirmation is ON, you must confirm email first
+    setStatus("✅ Signed up! Check your email to confirm, then sign in.");
   }
 
   async function signIn() {
@@ -50,7 +56,10 @@ export default function LoginPage() {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
     if (error) {
       setStatus(`❌ ${error.message}`);
@@ -58,8 +67,6 @@ export default function LoginPage() {
     }
 
     await ensureProfile();
-
-    setStatus("✅ Signed in!");
     window.location.href = "/events";
   }
 
@@ -74,7 +81,7 @@ export default function LoginPage() {
 
   return (
     <div style={{ maxWidth: 420, margin: "48px auto", fontFamily: "system-ui" }}>
-      <h1 style={{ marginBottom: 16 }}>Login</h1>
+      <h1>Login</h1>
 
       <input
         placeholder="Email"

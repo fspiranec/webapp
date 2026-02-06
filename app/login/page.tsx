@@ -31,7 +31,12 @@ export default function LoginPage() {
       password,
     });
 
-    setStatus(error ? `❌ ${error.message}` : "✅ Signed in!");
+    if (error) {
+  setStatus(`❌ ${error.message}`);
+} else {
+  setStatus("✅ Signed in!");
+  window.location.href = "/events";
+}
   }
 
   async function signOut() {

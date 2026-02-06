@@ -8,6 +8,22 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState("");
 
+  async function ensureProfile() {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    const { data } = await supabase.auth.getUser();
+    const user = data.user;
+    if (!user) return;
+
+    // Create profile row if missing
+    await supabase.from("profiles").upsert({
+      id: user.id,
+      full_name: null,
+      avatar_url: null,
+    });
+  }
+
   async function signUp() {
     setStatus("Signing up...");
     const supabase = getSupabaseBrowserClient();
@@ -16,9 +32,17 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
     });
 
-    setStatus(error ? `❌ ${error.message}` : "✅ Signed up! Check your email if confirmation is enabled.");
+    if (error) {
+      setStatus(`❌ ${error.message}`);
+      return;
+    }
+
+    setStatus("✅ Signed up! Check your email to confirm.");
   }
 
   async function signIn() {
@@ -26,17 +50,17 @@ export default function LoginPage() {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-  setStatus(`❌ ${error.message}`);
-} else {
-  setStatus("✅ Signed in!");
-  window.location.href = "/events";
-}
+      setStatus(`❌ ${error.message}`);
+      return;
+    }
+
+    await ensureProfile();
+
+    setStatus("✅ Signed in!");
+    window.location.href = "/events";
   }
 
   async function signOut() {
@@ -50,13 +74,13 @@ export default function LoginPage() {
 
   return (
     <div style={{ maxWidth: 420, margin: "48px auto", fontFamily: "system-ui" }}>
-      <h1>Login</h1>
+      <h1 style={{ marginBottom: 16 }}>Login</h1>
 
       <input
         placeholder="Email"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        style={{ width: "100%", padding: 8, marginBottom: 12 }}
+        style={{ width: "100%", padding: 10, marginBottom: 12 }}
       />
 
       <input
@@ -64,7 +88,7 @@ export default function LoginPage() {
         type="password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
-        style={{ width: "100%", padding: 8, marginBottom: 12 }}
+        style={{ width: "100%", padding: 10, marginBottom: 12 }}
       />
 
       <div style={{ display: "flex", gap: 8 }}>

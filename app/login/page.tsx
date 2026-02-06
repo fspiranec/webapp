@@ -1,27 +1,44 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [status, setStatus] = useState<string>("");
+  const [status, setStatus] = useState("");
 
   async function signUp() {
     setStatus("Signing up...");
-    const { error } = await supabase.auth.signUp({ email, password });
-    setStatus(error ? `❌ ${error.message}` : "✅ Signed up! (You can now sign in)");
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+
+    setStatus(error ? `❌ ${error.message}` : "✅ Signed up! Check your email if confirmation is enabled.");
   }
 
   async function signIn() {
     setStatus("Signing in...");
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
     setStatus(error ? `❌ ${error.message}` : "✅ Signed in!");
   }
 
   async function signOut() {
     setStatus("Signing out...");
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
     const { error } = await supabase.auth.signOut();
     setStatus(error ? `❌ ${error.message}` : "✅ Signed out");
   }
@@ -30,21 +47,19 @@ export default function LoginPage() {
     <div style={{ maxWidth: 420, margin: "48px auto", fontFamily: "system-ui" }}>
       <h1>Login</h1>
 
-      <label>Email</label>
       <input
-        style={{ width: "100%", padding: 8, margin: "6px 0 12px" }}
+        placeholder="Email"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        placeholder="you@email.com"
+        style={{ width: "100%", padding: 8, marginBottom: 12 }}
       />
 
-      <label>Password</label>
       <input
-        style={{ width: "100%", padding: 8, margin: "6px 0 12px" }}
+        placeholder="Password"
+        type="password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
-        placeholder="password"
-        type="password"
+        style={{ width: "100%", padding: 8, marginBottom: 12 }}
       />
 
       <div style={{ display: "flex", gap: 8 }}>

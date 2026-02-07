@@ -85,20 +85,22 @@ export default function EventsPage() {
               <button style={btnPrimary} onClick={() => router.push("/events/new")}>
                 + New event
               </button>
+
               <button style={btnGhost} onClick={() => router.push("/invites")}>
                 Invites
               </button>
+
+              <button style={btnGhost} onClick={() => router.push("/profile")}>
+                Profile
+              </button>
+
               <button style={btnGhost} onClick={signOut}>
                 Sign out
               </button>
             </div>
           </div>
 
-          {err && (
-            <div style={statusBox(false)}>
-              ❌ {err}
-            </div>
-          )}
+          {err && <div style={statusBox(false)}>❌ {err}</div>}
 
           <div style={{ marginTop: 16, display: "grid", gap: 12 }}>
             {events.length === 0 ? (
@@ -157,7 +159,8 @@ function Card({ children }: { children: React.ReactNode }) {
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
-  background: "radial-gradient(900px 500px at 50% 0%, rgba(124,58,237,0.45), transparent 60%), linear-gradient(180deg, #0b1020 0%, #0f172a 60%, #111827 100%)",
+  background:
+    "radial-gradient(900px 500px at 50% 0%, rgba(124,58,237,0.45), transparent 60%), linear-gradient(180deg, #0b1020 0%, #0f172a 60%, #111827 100%)",
   padding: 24,
 };
 

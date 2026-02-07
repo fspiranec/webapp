@@ -40,6 +40,12 @@ type InviteRow = {
   created_at: string;
 };
 
+type FriendRow = {
+  id: string;
+  friend_email: string;
+  friend_name: string | null;
+};
+
 /* ================= PAGE ================= */
 
 export default function EventPage() {
@@ -51,6 +57,8 @@ export default function EventPage() {
   const [items, setItems] = useState<ItemRow[]>([]);
   const [claims, setClaims] = useState<ClaimRow[]>([]);
   const [invites, setInvites] = useState<InviteRow[]>([]);
+  const [friends, setFriends] = useState<FriendRow[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("");
 
@@ -149,7 +157,7 @@ export default function EventPage() {
 
     setClaims(mergedClaims);
 
-    // Invites (creator only will see them due to RLS)
+    // Invites (creator sees them due to RLS; invited user sees their own)
     const inv = await supabase
       .from("event_invites")
       .select("id,email,accepted,created_at")
@@ -157,6 +165,14 @@ export default function EventPage() {
       .order("created_at", { ascending: false });
 
     setInvites((inv.data ?? []) as InviteRow[]);
+
+    // Friends (for dropdown)
+    const fr = await supabase
+      .from("friends")
+      .select("id,friend_email,friend_name")
+      .order("created_at", { ascending: false });
+
+    setFriends((fr.data ?? []) as FriendRow[]);
 
     setLoading(false);
   }
@@ -305,7 +321,11 @@ export default function EventPage() {
             </div>
             {me?.email && (
               <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
-                Signed in as <b>{me.email}</b> • <a href="/invites" style={{ color: "#93c5fd", textDecoration: "none" }}>Invites</a>
+                Signed in as <b>{me.email}</b>
+                {" "}•{" "}
+                <a href="/invites" style={{ color: "#93c5fd", textDecoration: "none" }}>Invites</a>
+                {" "}•{" "}
+                <a href="/profile" style={{ color: "#93c5fd", textDecoration: "none" }}>Profile</a>
               </div>
             )}
           </div>
@@ -317,20 +337,41 @@ export default function EventPage() {
         {isCreator && (
           <Card>
             <h2 style={{ marginTop: 0 }}>Invite people</h2>
+
             <p style={{ color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
-              Enter email. They must sign in with that email and accept on <b>/invites</b>.
+              Pick from your friends or type an email. Friends list is in <b>/profile</b>.
             </p>
 
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
-              <input
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder="friend@email.com"
+            <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+              {/* Friend dropdown */}
+              <select
+                value=""
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val) setInviteEmail(val);
+                }}
                 style={inputStyle}
-              />
-              <button onClick={sendInvite} style={btnPrimary}>
-                Send invite
-              </button>
+              >
+                <option value="">👇 Choose a friend (optional)</option>
+                {friends.map((f) => (
+                  <option key={f.id} value={f.friend_email}>
+                    {f.friend_name ? `${f.friend_name} — ${f.friend_email}` : f.friend_email}
+                  </option>
+                ))}
+              </select>
+
+              {/* Manual email */}
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <input
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="friend@email.com"
+                  style={inputStyle}
+                />
+                <button onClick={sendInvite} style={btnPrimary}>
+                  Send invite
+                </button>
+              </div>
             </div>
 
             {inviteStatus && (

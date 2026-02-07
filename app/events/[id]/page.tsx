@@ -3,8 +3,33 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import PollsCard from "./PollsCard";
 
 /* ================= TYPES ================= */
+type PollRow = {
+  id: string;
+  event_id: string;
+  question: string;
+  mode: "single" | "multi";
+  created_by: string;
+  created_at: string;
+};
+
+type PollOptionRow = {
+  id: string;
+  poll_id: string;
+  label: string;
+};
+
+type PollVoteRow = {
+  id: string;
+  event_id: string;
+  poll_id: string;
+  option_id: string;
+  user_id: string;
+  created_at: string;
+};
+
 
 type EventRow = {
   id: string;
@@ -77,6 +102,11 @@ export default function EventPage() {
   const [invites, setInvites] = useState<InviteRow[]>([]);
   const [friends, setFriends] = useState<FriendRow[]>([]);
   const [members, setMembers] = useState<MemberRow[]>([]);
+
+  const [polls, setPolls] = useState<PollRow[]>([]);
+  const [pollOptions, setPollOptions] = useState<PollOptionRow[]>([]);
+  const [pollVotes, setPollVotes] = useState<PollVoteRow[]>([]);
+
 
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("");
@@ -623,6 +653,36 @@ export default function EventPage() {
     setChatStatus("✅ Sent");
     await loadMessages(chatTab);
   }
+// POLLS
+const p = await supabase
+  .from("event_polls")
+  .select("id,event_id,question,mode,created_by,created_at")
+  .eq("event_id", eventId)
+  .order("created_at", { ascending: false });
+
+setPolls((p.data ?? []) as any);
+
+const pollIds = (p.data ?? []).map((x: any) => x.id);
+
+if (pollIds.length === 0) {
+  setPollOptions([]);
+  setPollVotes([]);
+} else {
+  const o = await supabase
+    .from("event_poll_options")
+    .select("id,poll_id,label")
+    .in("poll_id", pollIds)
+    .order("created_at", { ascending: true });
+
+  setPollOptions((o.data ?? []) as any);
+
+  const v = await supabase
+    .from("event_poll_votes")
+    .select("id,event_id,poll_id,option_id,user_id,created_at")
+    .eq("event_id", eventId);
+
+  setPollVotes((v.data ?? []) as any);
+}
 
   /* ================= UI ================= */
 

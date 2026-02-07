@@ -69,6 +69,10 @@ export default function EventPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteStatus, setInviteStatus] = useState("");
 
+  // Multi-invite selection
+  const [selectedFriendIds, setSelectedFriendIds] = useState<Record<string, boolean>>({});
+  const [bulkStatus, setBulkStatus] = useState("");
+
   /* ================= HELPERS ================= */
 
   const claimsByItem = useMemo(() => {
@@ -88,12 +92,26 @@ export default function EventPage() {
   const isCreator = me?.id === event?.creator_id;
   const hideClaims = !!event?.surprise_mode && !!isCreator;
 
+  const selectedFriends = useMemo(() => {
+    const ids = Object.keys(selectedFriendIds).filter((k) => selectedFriendIds[k]);
+    return friends.filter((f) => ids.includes(f.id));
+  }, [selectedFriendIds, friends]);
+
+  function toggleFriend(id: string) {
+    setSelectedFriendIds((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
+
+  function clearSelected() {
+    setSelectedFriendIds({});
+  }
+
   /* ================= LOAD ALL ================= */
 
   async function loadAll() {
     setLoading(true);
     setStatus("");
     setInviteStatus("");
+    setBulkStatus("");
 
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
@@ -157,7 +175,7 @@ export default function EventPage() {
 
     setClaims(mergedClaims);
 
-    // Invites (creator sees them due to RLS; invited user sees their own)
+    // Invites
     const inv = await supabase
       .from("event_invites")
       .select("id,email,accepted,created_at")
@@ -166,13 +184,24 @@ export default function EventPage() {
 
     setInvites((inv.data ?? []) as InviteRow[]);
 
-    // Friends (for dropdown)
+    // Friends
     const fr = await supabase
       .from("friends")
       .select("id,friend_email,friend_name")
       .order("created_at", { ascending: false });
 
-    setFriends((fr.data ?? []) as FriendRow[]);
+    const frList = (fr.data ?? []) as FriendRow[];
+    setFriends(frList);
+
+    // remove selected ids that no longer exist
+    setSelectedFriendIds((prev) => {
+      const allowed = new Set(frList.map((f) => f.id));
+      const next: Record<string, boolean> = {};
+      for (const k of Object.keys(prev)) {
+        if (allowed.has(k) && prev[k]) next[k] = true;
+      }
+      return next;
+    });
 
     setLoading(false);
   }
@@ -254,23 +283,16 @@ export default function EventPage() {
 
   /* ================= ACTIONS: INVITES ================= */
 
-  async function sendInvite() {
-    setInviteStatus("");
+  async function sendInvite(email: string) {
     const supabase = getSupabaseBrowserClient();
-    if (!supabase) return;
+    if (!supabase) return { ok: false, message: "No supabase client" };
 
-    const clean = inviteEmail.trim().toLowerCase();
-    if (!clean.includes("@")) {
-      setInviteStatus("❌ Enter a valid email");
-      return;
-    }
+    const clean = email.trim().toLowerCase();
+    if (!clean.includes("@")) return { ok: false, message: `Invalid email: ${email}` };
 
     const { data: sess } = await supabase.auth.getSession();
     const user = sess.session?.user;
-    if (!user) {
-      setInviteStatus("❌ Not logged in");
-      return;
-    }
+    if (!user) return { ok: false, message: "Not logged in" };
 
     const res = await supabase.from("event_invites").insert({
       event_id: eventId,
@@ -279,12 +301,68 @@ export default function EventPage() {
     });
 
     if (res.error) {
-      setInviteStatus(`❌ ${res.error.message}`);
+      // If you added unique index, duplicates will show here — we treat it as "already invited"
+      const msg = res.error.message.toLowerCase();
+      if (msg.includes("duplicate") || msg.includes("unique")) {
+        return { ok: true, message: `Already invited: ${clean}` };
+      }
+      return { ok: false, message: res.error.message };
+    }
+
+    return { ok: true, message: `Invited: ${clean}` };
+  }
+
+  async function sendSingleInvite() {
+    setInviteStatus("");
+    setBulkStatus("");
+
+    const clean = inviteEmail.trim();
+    if (!clean) {
+      setInviteStatus("❌ Enter an email or choose a friend");
+      return;
+    }
+
+    setInviteStatus("Sending…");
+    const result = await sendInvite(clean);
+
+    if (!result.ok) {
+      setInviteStatus(`❌ ${result.message}`);
       return;
     }
 
     setInviteEmail("");
     setInviteStatus("✅ Invite created");
+    await loadAll();
+  }
+
+  async function inviteSelectedFriends() {
+    setInviteStatus("");
+    setBulkStatus("");
+
+    if (selectedFriends.length === 0) {
+      setBulkStatus("❌ Select at least one friend");
+      return;
+    }
+
+    setBulkStatus("Inviting selected…");
+
+    // Send invites sequentially (safer for rate limits)
+    const okMsgs: string[] = [];
+    const badMsgs: string[] = [];
+
+    for (const f of selectedFriends) {
+      const r = await sendInvite(f.friend_email);
+      if (r.ok) okMsgs.push(r.message);
+      else badMsgs.push(`${f.friend_email}: ${r.message}`);
+    }
+
+    if (badMsgs.length === 0) {
+      setBulkStatus(`✅ Invited ${okMsgs.length} friend(s)`);
+      clearSelected();
+    } else {
+      setBulkStatus(`⚠️ Invited ${okMsgs.length}, failed ${badMsgs.length}: ${badMsgs.join(" | ")}`);
+    }
+
     await loadAll();
   }
 
@@ -339,11 +417,59 @@ export default function EventPage() {
             <h2 style={{ marginTop: 0 }}>Invite people</h2>
 
             <p style={{ color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
-              Pick from your friends or type an email. Friends list is in <b>/profile</b>.
+              Invite one friend, or select many and invite all at once.
             </p>
 
-            <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-              {/* Friend dropdown */}
+            {/* Multi invite checkboxes */}
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontWeight: 900, marginBottom: 8 }}>Your friends</div>
+
+              {friends.length === 0 ? (
+                <div style={{ color: "rgba(229,231,235,0.75)" }}>
+                  No friends yet. Add them in <a href="/profile" style={{ color: "#93c5fd", textDecoration: "none" }}>/profile</a>.
+                </div>
+              ) : (
+                <div style={{ display: "grid", gap: 8 }}>
+                  {friends.map((f) => {
+                    const checked = !!selectedFriendIds[f.id];
+                    return (
+                      <label key={f.id} style={friendRow}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleFriend(f.id)}
+                          style={{ width: 18, height: 18 }}
+                        />
+                        <div style={{ display: "flex", flexDirection: "column" }}>
+                          <b>{f.friend_name ? f.friend_name : f.friend_email}</b>
+                          <span style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>{f.friend_email}</span>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                <button onClick={inviteSelectedFriends} style={btnPrimary}>
+                  Invite selected ({selectedFriends.length})
+                </button>
+                <button onClick={clearSelected} style={btnGhost}>
+                  Clear selection
+                </button>
+              </div>
+
+              {bulkStatus && (
+                <div style={statusBoxStyle(bulkStatus.startsWith("✅"))}>
+                  {bulkStatus}
+                </div>
+              )}
+            </div>
+
+            <hr style={hrStyle} />
+
+            {/* Single invite dropdown + email */}
+            <div style={{ display: "grid", gap: 10 }}>
               <select
                 value=""
                 onChange={(e) => {
@@ -352,7 +478,7 @@ export default function EventPage() {
                 }}
                 style={inputStyle}
               >
-                <option value="">👇 Choose a friend (optional)</option>
+                <option value="">👇 Choose one friend (optional)</option>
                 {friends.map((f) => (
                   <option key={f.id} value={f.friend_email}>
                     {f.friend_name ? `${f.friend_name} — ${f.friend_email}` : f.friend_email}
@@ -360,7 +486,6 @@ export default function EventPage() {
                 ))}
               </select>
 
-              {/* Manual email */}
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 <input
                   value={inviteEmail}
@@ -368,15 +493,15 @@ export default function EventPage() {
                   placeholder="friend@email.com"
                   style={inputStyle}
                 />
-                <button onClick={sendInvite} style={btnPrimary}>
+                <button onClick={sendSingleInvite} style={btnPrimary}>
                   Send invite
                 </button>
               </div>
-            </div>
 
-            {inviteStatus && (
-              <div style={statusBoxStyle(inviteStatus.startsWith("✅"))}>{inviteStatus}</div>
-            )}
+              {inviteStatus && (
+                <div style={statusBoxStyle(inviteStatus.startsWith("✅"))}>{inviteStatus}</div>
+              )}
+            </div>
 
             <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
               {invites.length === 0 ? (
@@ -550,6 +675,16 @@ const rowStyle: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
 };
 
+const friendRow: React.CSSProperties = {
+  display: "flex",
+  gap: 12,
+  alignItems: "center",
+  padding: 12,
+  borderRadius: 14,
+  background: "rgba(255,255,255,0.05)",
+  border: "1px solid rgba(255,255,255,0.10)",
+};
+
 function pillStyle(color: string): React.CSSProperties {
   return {
     fontSize: 12,
@@ -579,6 +714,16 @@ const btnPrimary: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.14)",
   background: "linear-gradient(90deg,#60a5fa,#a78bfa)",
   color: "#0b1020",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const btnGhost: React.CSSProperties = {
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(255,255,255,0.06)",
+  color: "#e5e7eb",
   fontWeight: 900,
   cursor: "pointer",
 };

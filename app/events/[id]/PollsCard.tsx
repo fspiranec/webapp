@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
-type Poll = {
+type PollRow = {
   id: string;
   event_id: string;
   question: string;
@@ -12,13 +12,14 @@ type Poll = {
   created_at: string;
 };
 
-type Option = {
+type PollOptionRow = {
   id: string;
   poll_id: string;
   label: string;
+  created_at?: string;
 };
 
-type Vote = {
+type PollVoteRow = {
   id: string;
   event_id: string;
   poll_id: string;
@@ -31,22 +32,20 @@ export default function PollsCard(props: {
   eventId: string;
   meId: string;
   isCreator: boolean;
-  polls: Poll[];
-  options: Option[];
-  votes: Vote[];
-  onReload: () => Promise<void>;
+  polls: PollRow[];
+  options: PollOptionRow[];
+  votes: PollVoteRow[];
+  onRefresh: () => Promise<void>;
 }) {
-  const { eventId, meId, isCreator, polls, options, votes, onReload } = props;
+  const { eventId, meId, isCreator, polls, options, votes, onRefresh } = props;
 
-  const [status, setStatus] = useState("");
-
-  // create poll form
   const [q, setQ] = useState("");
   const [mode, setMode] = useState<"single" | "multi">("single");
-  const [optionsText, setOptionsText] = useState("Option 1\nOption 2");
+  const [optsText, setOptsText] = useState("Option 1\nOption 2");
+  const [status, setStatus] = useState("");
 
   const optionsByPoll = useMemo(() => {
-    const map = new Map<string, Option[]>();
+    const map = new Map<string, PollOptionRow[]>();
     for (const o of options) {
       const arr = map.get(o.poll_id) ?? [];
       arr.push(o);
@@ -55,8 +54,18 @@ export default function PollsCard(props: {
     return map;
   }, [options]);
 
+  const votesByPoll = useMemo(() => {
+    const map = new Map<string, PollVoteRow[]>();
+    for (const v of votes) {
+      const arr = map.get(v.poll_id) ?? [];
+      arr.push(v);
+      map.set(v.poll_id, arr);
+    }
+    return map;
+  }, [votes]);
+
   const votesByOption = useMemo(() => {
-    const map = new Map<string, Vote[]>();
+    const map = new Map<string, PollVoteRow[]>();
     for (const v of votes) {
       const arr = map.get(v.option_id) ?? [];
       arr.push(v);
@@ -65,16 +74,13 @@ export default function PollsCard(props: {
     return map;
   }, [votes]);
 
-  const myVotesByPoll = useMemo(() => {
-    const map = new Map<string, Set<string>>(); // poll_id -> set(option_id)
-    for (const v of votes) {
-      if (v.user_id !== meId) continue;
-      const set = map.get(v.poll_id) ?? new Set<string>();
-      set.add(v.option_id);
-      map.set(v.poll_id, set);
-    }
-    return map;
-  }, [votes, meId]);
+  function myVotesForPoll(pollId: string) {
+    return (votesByPoll.get(pollId) ?? []).filter((v) => v.user_id === meId);
+  }
+
+  function myVotedOptionIdsForPoll(pollId: string) {
+    return new Set(myVotesForPoll(pollId).map((v) => v.option_id));
+  }
 
   async function createPoll() {
     setStatus("");
@@ -82,57 +88,35 @@ export default function PollsCard(props: {
     if (!supabase) return;
 
     const question = q.trim();
-    const rawLines = optionsText
+    const lines = optsText
       .split("\n")
-      .map((s) => s.trim())
+      .map((x) => x.trim())
       .filter(Boolean);
 
-    if (!question) {
-      setStatus("❌ Enter poll question");
-      return;
-    }
-    if (rawLines.length < 2) {
-      setStatus("❌ Add at least 2 options (one per line)");
-      return;
-    }
+    if (!question) return setStatus("❌ Enter a question");
+    if (lines.length < 2) return setStatus("❌ Enter at least 2 options");
 
-    setStatus("Creating poll…");
+    setStatus("Creating…");
 
-    const p = await supabase
+    const ins = await supabase
       .from("event_polls")
-      .insert({
-        event_id: eventId,
-        question,
-        mode,
-        created_by: meId,
-      })
+      .insert({ event_id: eventId, question, mode, created_by: meId })
       .select("id")
       .single();
 
-    if (p.error) {
-      setStatus(`❌ ${p.error.message}`);
-      return;
-    }
+    if (ins.error) return setStatus(`❌ ${ins.error.message}`);
+    const pollId = ins.data.id as string;
 
-    const pollId = p.data.id as string;
+    const payload = lines.map((label) => ({ poll_id: pollId, label }));
+    const insOpt = await supabase.from("event_poll_options").insert(payload);
 
-    const ins = await supabase.from("event_poll_options").insert(
-      rawLines.map((label) => ({
-        poll_id: pollId,
-        label,
-      }))
-    );
-
-    if (ins.error) {
-      setStatus(`❌ ${ins.error.message}`);
-      return;
-    }
+    if (insOpt.error) return setStatus(`❌ ${insOpt.error.message}`);
 
     setQ("");
-    setOptionsText("Option 1\nOption 2");
     setMode("single");
+    setOptsText("Option 1\nOption 2");
     setStatus("✅ Poll created");
-    await onReload();
+    await onRefresh();
   }
 
   async function deletePoll(pollId: string) {
@@ -142,149 +126,170 @@ export default function PollsCard(props: {
 
     setStatus("Deleting…");
     const del = await supabase.from("event_polls").delete().eq("id", pollId).eq("event_id", eventId);
-    if (del.error) {
-      setStatus(`❌ ${del.error.message}`);
-      return;
-    }
+
+    if (del.error) return setStatus(`❌ ${del.error.message}`);
     setStatus("✅ Deleted");
-    await onReload();
+    await onRefresh();
   }
 
-  async function toggleVote(pollId: string, optionId: string) {
+  async function toggleVote(poll: PollRow, optionId: string) {
     setStatus("");
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
 
-    const r = await supabase.rpc("toggle_poll_vote", {
-      p_poll_id: pollId,
-      p_option_id: optionId,
-    });
+    const mine = myVotesForPoll(poll.id);
+    const mineSet = new Set(mine.map((v) => v.option_id));
+    const already = mineSet.has(optionId);
 
-    if (r.error) {
-      setStatus(`❌ ${r.error.message}`);
+    // If already voted this option -> unvote
+    if (already) {
+      const del = await supabase
+        .from("event_poll_votes")
+        .delete()
+        .eq("event_id", eventId)
+        .eq("poll_id", poll.id)
+        .eq("option_id", optionId)
+        .eq("user_id", meId);
+
+      if (del.error) return setStatus(`❌ ${del.error.message}`);
+      await onRefresh();
       return;
     }
 
-    await onReload();
+    // SINGLE: remove my other votes first
+    if (poll.mode === "single") {
+      const delMine = await supabase
+        .from("event_poll_votes")
+        .delete()
+        .eq("event_id", eventId)
+        .eq("poll_id", poll.id)
+        .eq("user_id", meId);
+
+      if (delMine.error) return setStatus(`❌ ${delMine.error.message}`);
+    }
+
+    const ins = await supabase.from("event_poll_votes").insert({
+      event_id: eventId,
+      poll_id: poll.id,
+      option_id: optionId,
+      user_id: meId,
+    });
+
+    if (ins.error) return setStatus(`❌ ${ins.error.message}`);
+    await onRefresh();
   }
 
   return (
-    <Card>
+    <div style={card}>
       <h2 style={{ marginTop: 0 }}>Polls</h2>
 
       {isCreator && (
-        <div style={{ marginBottom: 14 }}>
+        <div style={{ marginTop: 10 }}>
           <div style={{ fontWeight: 900, marginBottom: 8 }}>Create a poll</div>
-
           <input
-            style={inputStyle}
-            placeholder="Poll question…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
+            placeholder="Poll question…"
+            style={input}
           />
-
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
-            <select style={inputStyle} value={mode} onChange={(e) => setMode(e.target.value as any)}>
-              <option value="single">Single choice (one answer)</option>
-              <option value="multi">Multiple choice (many answers)</option>
-            </select>
-          </div>
+          <select value={mode} onChange={(e) => setMode(e.target.value as any)} style={{ ...input, marginTop: 10 }}>
+            <option value="single">Single choice (one answer)</option>
+            <option value="multi">Multi choice (many answers)</option>
+          </select>
 
           <textarea
-            style={{ ...inputStyle, minHeight: 110, marginTop: 10 }}
-            value={optionsText}
-            onChange={(e) => setOptionsText(e.target.value)}
-            placeholder={"Option 1\nOption 2\nOption 3"}
+            value={optsText}
+            onChange={(e) => setOptsText(e.target.value)}
+            style={{ ...input, marginTop: 10, minHeight: 90 }}
           />
 
-          <button style={btnPrimary} onClick={createPoll}>
+          <button onClick={createPoll} style={btnPrimary}>
             + Create poll
           </button>
         </div>
       )}
 
-      {status && <div style={statusBoxStyle(status.startsWith("✅"))}>{status}</div>}
+      {status ? <div style={statusBox(status.startsWith("✅"))}>{status}</div> : null}
 
-      {polls.length === 0 ? (
-        <div style={{ color: "rgba(229,231,235,0.75)" }}>No polls yet.</div>
-      ) : (
-        <div style={{ display: "grid", gap: 12, marginTop: 10 }}>
-          {polls.map((p) => {
+      <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
+        {polls.length === 0 ? (
+          <div style={{ color: "rgba(229,231,235,0.75)" }}>No polls yet.</div>
+        ) : (
+          polls.map((p) => {
             const opts = optionsByPoll.get(p.id) ?? [];
-            const mySet = myVotesByPoll.get(p.id) ?? new Set<string>();
+            const mySet = myVotedOptionIdsForPoll(p.id);
 
             return (
-              <div key={p.id} style={panel}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <div key={p.id} style={pollBox}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
                   <div>
                     <div style={{ fontWeight: 900, fontSize: 16 }}>{p.question}</div>
-                    <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)", marginTop: 4 }}>
+                    <div style={{ fontSize: 13, color: "rgba(229,231,235,0.7)", marginTop: 3 }}>
                       Mode: <b>{p.mode.toUpperCase()}</b>
+                    </div>
+                    <div style={{ fontSize: 12, color: "rgba(229,231,235,0.6)", marginTop: 6 }}>
+                      Tip: click the same option again to unvote. In SINGLE mode, picking another option switches your vote.
                     </div>
                   </div>
 
                   {isCreator && (
-                    <button style={btnDangerSmall} onClick={() => deletePoll(p.id)}>
+                    <button onClick={() => deletePoll(p.id)} style={btnDangerSmall}>
                       Delete poll
                     </button>
                   )}
                 </div>
 
-                <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
-                  {opts.map((o) => {
-                    const v = votesByOption.get(o.id) ?? [];
-                    const count = v.length;
-                    const mine = mySet.has(o.id);
+                {/* ✅ OPTIONS (this is what your screenshot is missing) */}
+                <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+                  {opts.length === 0 ? (
+                    <div style={{ color: "rgba(229,231,235,0.7)" }}>
+                      No options found (check `event_poll_options`).
+                    </div>
+                  ) : (
+                    opts.map((o) => {
+                      const count = (votesByOption.get(o.id) ?? []).length;
+                      const selected = mySet.has(o.id);
 
-                    return (
-                      <button
-                        key={o.id}
-                        onClick={() => toggleVote(p.id, o.id)}
-                        style={voteBtn(mine)}
-                        title="Click to vote/unvote"
-                      >
-                        <span style={{ fontWeight: 900 }}>{o.label}</span>
-                        <span style={{ opacity: 0.8 }}>({count})</span>
-                        {mine ? <span style={tag}>You voted</span> : null}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div style={{ marginTop: 10, fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
-                  Tip: click the same option again to unvote. In SINGLE mode, picking another option switches your vote.
+                      return (
+                        <button
+                          key={o.id}
+                          onClick={() => toggleVote(p, o.id)}
+                          style={optionBtn(selected)}
+                        >
+                          <span style={{ fontWeight: 900 }}>{o.label}</span>
+                          <span style={{ opacity: 0.85 }}>({count})</span>
+                        </button>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             );
-          })}
-        </div>
-      )}
-    </Card>
-  );
-}
-
-/* ================= UI STYLES ================= */
-
-function Card({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        borderRadius: 18,
-        padding: 18,
-        background: "rgba(255,255,255,0.06)",
-        border: "1px solid rgba(255,255,255,0.10)",
-        boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
-        marginTop: 14,
-        color: "#e5e7eb",
-        fontFamily: "system-ui",
-      }}
-    >
-      {children}
+          })
+        )}
+      </div>
     </div>
   );
 }
 
-const inputStyle: React.CSSProperties = {
+/* ===== styles ===== */
+const card: React.CSSProperties = {
+  borderRadius: 18,
+  padding: 18,
+  background: "rgba(255,255,255,0.06)",
+  border: "1px solid rgba(255,255,255,0.10)",
+  boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+  marginTop: 14,
+};
+
+const pollBox: React.CSSProperties = {
+  padding: 14,
+  borderRadius: 16,
+  background: "rgba(255,255,255,0.05)",
+  border: "1px solid rgba(255,255,255,0.10)",
+};
+
+const input: React.CSSProperties = {
   width: "100%",
   padding: "10px 12px",
   borderRadius: 12,
@@ -314,44 +319,26 @@ const btnDangerSmall: React.CSSProperties = {
   fontWeight: 900,
   cursor: "pointer",
   fontSize: 12,
+  height: 36,
 };
 
-const panel: React.CSSProperties = {
-  padding: 12,
-  borderRadius: 14,
-  background: "rgba(255,255,255,0.05)",
-  border: "1px solid rgba(255,255,255,0.10)",
-};
-
-function voteBtn(active: boolean): React.CSSProperties {
+function optionBtn(selected: boolean): React.CSSProperties {
   return {
     display: "flex",
-    alignItems: "center",
     justifyContent: "space-between",
-    gap: 10,
-    width: "100%",
+    alignItems: "center",
     padding: "10px 12px",
     borderRadius: 12,
     border: "1px solid rgba(255,255,255,0.14)",
-    background: active ? "rgba(96,165,250,0.20)" : "rgba(255,255,255,0.06)",
-    color: "#e5e7eb",
+    background: selected ? "rgba(96,165,250,0.22)" : "rgba(255,255,255,0.06)",
+    color: selected ? "#bfdbfe" : "#e5e7eb",
     cursor: "pointer",
     textAlign: "left",
+    fontWeight: 700,
   };
 }
 
-const tag: React.CSSProperties = {
-  marginLeft: 10,
-  padding: "3px 8px",
-  borderRadius: 999,
-  border: "1px solid rgba(255,255,255,0.18)",
-  background: "rgba(0,0,0,0.18)",
-  fontSize: 12,
-  color: "#93c5fd",
-  whiteSpace: "nowrap",
-};
-
-function statusBoxStyle(ok: boolean): React.CSSProperties {
+function statusBox(ok: boolean): React.CSSProperties {
   return {
     marginTop: 12,
     padding: 12,

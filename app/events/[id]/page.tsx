@@ -56,6 +56,7 @@ type ClaimRow = {
   event_item_id: string;
   user_id: string;
   full_name: string | null;
+  email: string | null;
 };
 
 type InviteRow = {
@@ -85,6 +86,7 @@ type MsgRow = {
   body: string;
   created_at: string;
   full_name: string | null;
+  email: string | null;
 };
 
 /* ================= PAGE ================= */
@@ -157,8 +159,12 @@ export default function EventPage() {
     return map;
   }, [claims]);
 
-  function displayNameByUser(userId: string, fullName: string | null) {
-    return fullName ?? userId.slice(0, 6);
+  function displayNameByUser(userId: string, fullName: string | null, email?: string | null) {
+    const name = (fullName ?? "").trim();
+    if (name) return name;
+    const em = (email ?? "").trim();
+    if (em) return em;
+    return userId.slice(0, 6);
   }
 
   const selectedFriends = useMemo(() => {
@@ -219,7 +225,7 @@ export default function EventPage() {
     }
     setItems((it.data ?? []) as ItemRow[]);
 
-    // Claims (manual join profiles for names)
+    // Claims
     const cl = await supabase
       .from("item_claims")
       .select("id,event_item_id,user_id,created_at")
@@ -233,26 +239,30 @@ export default function EventPage() {
     }
 
     const rawClaims = (cl.data ?? []) as { id: string; event_item_id: string; user_id: string }[];
-
     const claimUserIds = [...new Set(rawClaims.map((c) => c.user_id))];
-    const profilesMap = new Map<string, string | null>();
+
+    const claimProfilesMap = new Map<string, { full_name: string | null; email: string | null }>();
 
     if (claimUserIds.length > 0) {
-      const pr = await supabase.from("profiles").select("id, full_name").in("id", claimUserIds);
+      const pr = await supabase.from("profiles").select("id, full_name, email").in("id", claimUserIds);
       if (!pr.error) {
         (pr.data ?? []).forEach((p: any) => {
-          if (p?.id) profilesMap.set(p.id, p?.full_name ?? null);
+          if (p?.id) claimProfilesMap.set(p.id, { full_name: p.full_name ?? null, email: p.email ?? null });
         });
       }
     }
 
     setClaims(
-      rawClaims.map((c) => ({
-        id: c.id,
-        event_item_id: c.event_item_id,
-        user_id: c.user_id,
-        full_name: profilesMap.get(c.user_id) ?? null,
-      }))
+      rawClaims.map((c) => {
+        const prof = claimProfilesMap.get(c.user_id);
+        return {
+          id: c.id,
+          event_item_id: c.event_item_id,
+          user_id: c.user_id,
+          full_name: prof?.full_name ?? null,
+          email: prof?.email ?? null,
+        };
+      })
     );
 
     // Invites
@@ -265,7 +275,10 @@ export default function EventPage() {
     setInvites((inv.data ?? []) as InviteRow[]);
 
     // Friends
-    const fr = await supabase.from("friends").select("id,friend_email,friend_name").order("created_at", { ascending: false });
+    const fr = await supabase
+      .from("friends")
+      .select("id,friend_email,friend_name")
+      .order("created_at", { ascending: false });
 
     const frList = (fr.data ?? []) as FriendRow[];
     setFriends(frList);
@@ -273,59 +286,71 @@ export default function EventPage() {
     setSelectedFriendIds((prev) => {
       const allowed = new Set(frList.map((f) => f.id));
       const next: Record<string, boolean> = {};
-      for (const k of Object.keys(prev)) {
-        if (allowed.has(k) && prev[k]) next[k] = true;
-      }
+      for (const k of Object.keys(prev)) if (allowed.has(k) && prev[k]) next[k] = true;
       return next;
     });
 
-    // Members list (“coming”)
+    // Members list
     const mem = await supabase.from("event_members").select("user_id").eq("event_id", eventId);
     const memberIds = (mem.data ?? []).map((m: any) => m.user_id);
 
-    const membersProfiles = new Map<string, { full_name: string | null }>();
+    const memberProfilesMap = new Map<string, { full_name: string | null; email: string | null }>();
     if (memberIds.length > 0) {
-      const pr2 = await supabase.from("profiles").select("id, full_name").in("id", memberIds);
-      (pr2.data ?? []).forEach((p: any) => membersProfiles.set(p.id, { full_name: p.full_name ?? null }));
+      const pr2 = await supabase.from("profiles").select("id, full_name, email").in("id", memberIds);
+      if (!pr2.error) {
+        (pr2.data ?? []).forEach((p: any) => {
+          if (p?.id) memberProfilesMap.set(p.id, { full_name: p.full_name ?? null, email: p.email ?? null });
+        });
+      }
     }
 
     setMembers(
-      memberIds.map((uid: string) => ({
-        user_id: uid,
-        full_name: membersProfiles.get(uid)?.full_name ?? null,
-        email: uid === user.id ? user.email ?? null : null,
-      }))
+      memberIds.map((uid: string) => {
+        const prof = memberProfilesMap.get(uid);
+        return {
+          user_id: uid,
+          full_name: prof?.full_name ?? null,
+          email: uid === user.id ? user.email ?? prof?.email ?? null : prof?.email ?? null,
+        };
+      })
     );
 
-    // ===== POLLS (must be INSIDE loadAll) =====
+    // ===== POLLS (inside loadAll) =====
     const p = await supabase
       .from("event_polls")
       .select("id,event_id,question,mode,created_by,created_at")
       .eq("event_id", eventId)
       .order("created_at", { ascending: false });
 
-    setPolls((p.data ?? []) as any);
-
-    const pollIds = (p.data ?? []).map((x: any) => x.id);
-
-    if (pollIds.length === 0) {
+    if (p.error) {
+      setStatus(`❌ ${p.error.message}`);
+      setPolls([]);
       setPollOptions([]);
       setPollVotes([]);
     } else {
-      const o = await supabase
-        .from("event_poll_options")
-        .select("id,poll_id,label")
-        .in("poll_id", pollIds)
-        .order("created_at", { ascending: true });
+      setPolls((p.data ?? []) as any);
 
-      setPollOptions((o.data ?? []) as any);
+      const pollIds = (p.data ?? []).map((x: any) => x.id);
 
-      const v = await supabase
-        .from("event_poll_votes")
-        .select("id,event_id,poll_id,option_id,user_id,created_at")
-        .eq("event_id", eventId);
+      if (pollIds.length === 0) {
+        setPollOptions([]);
+        setPollVotes([]);
+      } else {
+        const o = await supabase
+          .from("event_poll_options")
+          .select("id,poll_id,label,created_at")
+          .in("poll_id", pollIds)
+          .order("created_at", { ascending: true });
 
-      setPollVotes((v.data ?? []) as any);
+        setPollOptions((o.data ?? []) as any);
+
+        const v = await supabase
+          .from("event_poll_votes")
+          .select("id,event_id,poll_id,option_id,user_id,created_at")
+          .eq("event_id", eventId);
+
+        setPollVotes((v.data ?? []) as any);
+      }
     }
 
     // Chat messages for current tab
@@ -346,20 +371,27 @@ export default function EventPage() {
       .order("created_at", { ascending: true });
 
     const raw = (msg.data ?? []) as any[];
-
     const ids = [...new Set(raw.map((m) => m.sender_id))];
-    const profilesMap = new Map<string, string | null>();
 
+    const profilesMap = new Map<string, { full_name: string | null; email: string | null }>();
     if (ids.length > 0) {
-      const pr = await supabase.from("profiles").select("id, full_name").in("id", ids);
-      (pr.data ?? []).forEach((p: any) => profilesMap.set(p.id, p.full_name ?? null));
+      const pr = await supabase.from("profiles").select("id, full_name, email").in("id", ids);
+      if (!pr.error) {
+        (pr.data ?? []).forEach((p: any) => {
+          if (p?.id) profilesMap.set(p.id, { full_name: p.full_name ?? null, email: p.email ?? null });
+        });
+      }
     }
 
     setMessages(
-      raw.map((m) => ({
-        ...m,
-        full_name: profilesMap.get(m.sender_id) ?? null,
-      })) as MsgRow[]
+      raw.map((m) => {
+        const prof = profilesMap.get(m.sender_id);
+        return {
+          ...m,
+          full_name: prof?.full_name ?? null,
+          email: prof?.email ?? null,
+        };
+      }) as MsgRow[]
     );
   }
 
@@ -517,9 +549,7 @@ export default function EventPage() {
 
     if (res.error) {
       const msg = res.error.message.toLowerCase();
-      if (msg.includes("duplicate") || msg.includes("unique")) {
-        return { ok: true, message: `Already invited: ${clean}` };
-      }
+      if (msg.includes("duplicate") || msg.includes("unique")) return { ok: true, message: `Already invited: ${clean}` };
       return { ok: false, message: res.error.message };
     }
 
@@ -738,7 +768,7 @@ export default function EventPage() {
                 <div key={m.user_id} style={rowStyle}>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 900 }}>
-                      {displayNameByUser(m.user_id, m.full_name)}
+                      {displayNameByUser(m.user_id, m.full_name, m.email)}
                       {m.user_id === event.creator_id ? " (creator)" : ""}
                       {m.user_id === me?.id ? " (you)" : ""}
                     </div>
@@ -750,9 +780,7 @@ export default function EventPage() {
 
             {!isCreator && (
               <div style={{ marginTop: 8 }}>
-                <button onClick={leaveEvent} style={btnDanger}>
-                  Leave event
-                </button>
+                <button onClick={leaveEvent} style={btnDanger}>Leave event</button>
                 {leaveStatus && <div style={statusBoxStyle(leaveStatus.startsWith("✅"))}>{leaveStatus}</div>}
               </div>
             )}
@@ -794,9 +822,7 @@ export default function EventPage() {
                 <button onClick={inviteSelectedFriends} style={btnPrimary}>
                   Invite selected ({selectedFriends.length})
                 </button>
-                <button onClick={clearSelected} style={btnGhost}>
-                  Clear selection
-                </button>
+                <button onClick={clearSelected} style={btnGhost}>Clear selection</button>
               </div>
 
               {bulkStatus && <div style={statusBoxStyle(bulkStatus.startsWith("✅"))}>{bulkStatus}</div>}
@@ -828,9 +854,7 @@ export default function EventPage() {
                   placeholder="friend@email.com"
                   style={inputStyle}
                 />
-                <button onClick={sendSingleInvite} style={btnPrimary}>
-                  Send invite
-                </button>
+                <button onClick={sendSingleInvite} style={btnPrimary}>Send invite</button>
               </div>
 
               {inviteStatus && <div style={statusBoxStyle(inviteStatus.startsWith("✅"))}>{inviteStatus}</div>}
@@ -849,9 +873,7 @@ export default function EventPage() {
                       </div>
                     </div>
 
-                    <button style={btnDangerSmall} onClick={() => uninvite(inv.id)}>
-                      Uninvite
-                    </button>
+                    <button style={btnDangerSmall} onClick={() => uninvite(inv.id)}>Uninvite</button>
                   </div>
                 ))
               )}
@@ -900,7 +922,6 @@ export default function EventPage() {
               {items.map((it) => {
                 const cs = claimsByItem.get(it.id) ?? [];
                 const iClaimed = !!me && cs.some((c) => c.user_id === me.id);
-
                 const canEdit = !!me && (it.created_by === me.id || isCreator);
 
                 const claimText = hideClaims
@@ -908,8 +929,8 @@ export default function EventPage() {
                   : cs.length === 0
                     ? "Not claimed yet"
                     : it.claim_mode === "single"
-                      ? `Claimed by ${displayNameByUser(cs[0].user_id, cs[0].full_name)}`
-                      : `Claimed by ${cs.map((c) => displayNameByUser(c.user_id, c.full_name)).join(", ")}`;
+                      ? `Claimed by ${displayNameByUser(cs[0].user_id, cs[0].full_name, cs[0].email)}`
+                      : `Claimed by ${cs.map((c) => displayNameByUser(c.user_id, c.full_name, c.email)).join(", ")}`;
 
                 const editing = editItemId === it.id;
 
@@ -979,11 +1000,11 @@ export default function EventPage() {
           <PollsCard
             eventId={eventId}
             meId={me.id}
-            isCreator={isCreator}
+            isCreator={!!isCreator}
             polls={polls}
             options={pollOptions}
             votes={pollVotes}
-            onReload={loadAll}
+            onRefresh={loadAll}
           />
         )}
 
@@ -1011,7 +1032,8 @@ export default function EventPage() {
                 messages.map((m) => (
                   <div key={m.id} style={{ marginBottom: 10 }}>
                     <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
-                      <b>{displayNameByUser(m.sender_id, m.full_name)}</b> • {new Date(m.created_at).toLocaleString()}
+                      <b>{displayNameByUser(m.sender_id, m.full_name, m.email)}</b> •{" "}
+                      {new Date(m.created_at).toLocaleString()}
                     </div>
                     <div style={{ marginTop: 3 }}>{m.body}</div>
                   </div>
@@ -1036,9 +1058,7 @@ export default function EventPage() {
         {isCreator && (
           <Card>
             <h2 style={{ marginTop: 0, color: "#fecaca" }}>Danger zone</h2>
-            <p style={{ color: "rgba(229,231,235,0.75)" }}>
-              Delete event (requires your password).
-            </p>
+            <p style={{ color: "rgba(229,231,235,0.75)" }}>Delete event (requires your password).</p>
 
             <input
               type="password"
@@ -1047,9 +1067,7 @@ export default function EventPage() {
               placeholder="Your password"
               style={inputStyle}
             />
-            <button onClick={deleteEventWithPassword} style={btnDanger}>
-              Delete event permanently
-            </button>
+            <button onClick={deleteEventWithPassword} style={btnDanger}>Delete event permanently</button>
 
             {deleteStatus && <div style={statusBoxStyle(deleteStatus.startsWith("✅"))}>{deleteStatus}</div>}
           </Card>

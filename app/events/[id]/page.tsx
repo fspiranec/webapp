@@ -30,7 +30,14 @@ type ClaimRow = {
   id: string;
   event_item_id: string;
   user_id: string;
-  full_name: string | null; // ✅ manual join result
+  full_name: string | null;
+};
+
+type InviteRow = {
+  id: string;
+  email: string;
+  accepted: boolean;
+  created_at: string;
 };
 
 /* ================= PAGE ================= */
@@ -43,12 +50,16 @@ export default function EventPage() {
   const [event, setEvent] = useState<EventRow | null>(null);
   const [items, setItems] = useState<ItemRow[]>([]);
   const [claims, setClaims] = useState<ClaimRow[]>([]);
+  const [invites, setInvites] = useState<InviteRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("");
 
   const [newItemTitle, setNewItemTitle] = useState("");
   const [newItemNotes, setNewItemNotes] = useState("");
   const [newItemMode, setNewItemMode] = useState<"single" | "multi">("single");
+
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteStatus, setInviteStatus] = useState("");
 
   /* ================= HELPERS ================= */
 
@@ -69,16 +80,16 @@ export default function EventPage() {
   const isCreator = me?.id === event?.creator_id;
   const hideClaims = !!event?.surprise_mode && !!isCreator;
 
-  /* ================= DATA LOAD ================= */
+  /* ================= LOAD ALL ================= */
 
   async function loadAll() {
     setLoading(true);
     setStatus("");
+    setInviteStatus("");
 
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
 
-    // Session
     const { data: sess } = await supabase.auth.getSession();
     if (!sess.session) {
       router.replace("/login");
@@ -90,8 +101,8 @@ export default function EventPage() {
     // Event
     const ev = await supabase.from("events").select("*").eq("id", eventId).single();
     if (ev.error) {
-      setLoading(false);
       setStatus(`❌ ${ev.error.message}`);
+      setLoading(false);
       return;
     }
     setEvent(ev.data as EventRow);
@@ -104,20 +115,19 @@ export default function EventPage() {
       .order("created_at", { ascending: true });
 
     if (it.error) {
-      setLoading(false);
       setStatus(`❌ ${it.error.message}`);
+      setLoading(false);
       return;
     }
     setItems((it.data ?? []) as ItemRow[]);
 
-    // Claims (manual join for names)
+    // Claims (manual join names)
     const cl = await supabase
       .from("item_claims")
-      .select("id,event_item_id,user_id")
+      .select("id,event_item_id,user_id,created_at")
       .eq("event_id", eventId)
       .order("created_at", { ascending: true });
 
-    // Surprise mode: creator may see 0 rows due to RLS (that's expected)
     const rawClaims = (cl.data ?? []) as { id: string; event_item_id: string; user_id: string }[];
 
     const userIds = [...new Set(rawClaims.map((c) => c.user_id))];
@@ -139,6 +149,15 @@ export default function EventPage() {
 
     setClaims(mergedClaims);
 
+    // Invites (creator only will see them due to RLS)
+    const inv = await supabase
+      .from("event_invites")
+      .select("id,email,accepted,created_at")
+      .eq("event_id", eventId)
+      .order("created_at", { ascending: false });
+
+    setInvites((inv.data ?? []) as InviteRow[]);
+
     setLoading(false);
   }
 
@@ -150,7 +169,7 @@ export default function EventPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
 
-  /* ================= ACTIONS ================= */
+  /* ================= ACTIONS: ITEMS ================= */
 
   async function addItem() {
     const title = newItemTitle.trim();
@@ -217,6 +236,42 @@ export default function EventPage() {
     await loadAll();
   }
 
+  /* ================= ACTIONS: INVITES ================= */
+
+  async function sendInvite() {
+    setInviteStatus("");
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    const clean = inviteEmail.trim().toLowerCase();
+    if (!clean.includes("@")) {
+      setInviteStatus("❌ Enter a valid email");
+      return;
+    }
+
+    const { data: sess } = await supabase.auth.getSession();
+    const user = sess.session?.user;
+    if (!user) {
+      setInviteStatus("❌ Not logged in");
+      return;
+    }
+
+    const res = await supabase.from("event_invites").insert({
+      event_id: eventId,
+      email: clean,
+      invited_by: user.id,
+    });
+
+    if (res.error) {
+      setInviteStatus(`❌ ${res.error.message}`);
+      return;
+    }
+
+    setInviteEmail("");
+    setInviteStatus("✅ Invite created");
+    await loadAll();
+  }
+
   /* ================= UI ================= */
 
   if (loading) return <div style={pageStyle}><Card><p>Loading…</p></Card></div>;
@@ -250,7 +305,7 @@ export default function EventPage() {
             </div>
             {me?.email && (
               <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
-                Signed in as <b>{me.email}</b>
+                Signed in as <b>{me.email}</b> • <a href="/invites" style={{ color: "#93c5fd", textDecoration: "none" }}>Invites</a>
               </div>
             )}
           </div>
@@ -258,6 +313,50 @@ export default function EventPage() {
           {event.description && <p style={{ marginTop: 12, color: "rgba(229,231,235,0.85)" }}>{event.description}</p>}
         </Card>
 
+        {/* INVITES */}
+        {isCreator && (
+          <Card>
+            <h2 style={{ marginTop: 0 }}>Invite people</h2>
+            <p style={{ color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
+              Enter email. They must sign in with that email and accept on <b>/invites</b>.
+            </p>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
+              <input
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="friend@email.com"
+                style={inputStyle}
+              />
+              <button onClick={sendInvite} style={btnPrimary}>
+                Send invite
+              </button>
+            </div>
+
+            {inviteStatus && (
+              <div style={statusBoxStyle(inviteStatus.startsWith("✅"))}>{inviteStatus}</div>
+            )}
+
+            <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
+              {invites.length === 0 ? (
+                <div style={{ color: "rgba(229,231,235,0.75)" }}>No invites yet.</div>
+              ) : (
+                invites.map((inv) => (
+                  <div key={inv.id} style={rowStyle}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 900 }}>{inv.email}</div>
+                      <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
+                        {inv.accepted ? "✅ Accepted" : "Pending"} • {new Date(inv.created_at).toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </Card>
+        )}
+
+        {/* ITEMS */}
         <Card>
           <h2 style={{ marginTop: 0 }}>Items</h2>
 
@@ -309,7 +408,7 @@ export default function EventPage() {
                     ? "Not claimed yet"
                     : it.claim_mode === "single"
                       ? `Claimed by ${displayName(cs[0])}`
-                      : `Claimed by ${cs.map(displayName).join(", ")}`; // ✅ multi-claim shows all names
+                      : `Claimed by ${cs.map(displayName).join(", ")}`;
 
                 return (
                   <div key={it.id} style={itemRowStyle}>
@@ -400,6 +499,16 @@ const itemRowStyle: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
 };
 
+const rowStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 12,
+  alignItems: "center",
+  padding: 12,
+  borderRadius: 14,
+  background: "rgba(255,255,255,0.05)",
+  border: "1px solid rgba(255,255,255,0.10)",
+};
+
 function pillStyle(color: string): React.CSSProperties {
   return {
     fontSize: 12,
@@ -423,6 +532,16 @@ function primaryBtnStyle(disabled: boolean): React.CSSProperties {
   };
 }
 
+const btnPrimary: React.CSSProperties = {
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "linear-gradient(90deg,#60a5fa,#a78bfa)",
+  color: "#0b1020",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
 const smallBtnStyle: React.CSSProperties = {
   padding: "9px 12px",
   borderRadius: 12,
@@ -445,6 +564,7 @@ const smallBtnDangerStyle: React.CSSProperties = {
 
 function statusBoxStyle(ok: boolean): React.CSSProperties {
   return {
+    marginTop: 12,
     padding: 12,
     borderRadius: 12,
     background: "rgba(255,255,255,0.06)",

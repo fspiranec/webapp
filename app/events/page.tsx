@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
-<button style={btnGhost} onClick={() => router.push("/invites")}>Invites</button>
 
 type EventRow = {
   id: string;

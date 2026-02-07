@@ -30,12 +30,13 @@ export default function EventsPage() {
         router.replace("/login");
         return;
       }
-      setEmail(sess.session.user.email ?? "");
+      const user = sess.session.user;
+      setEmail(user.email ?? "");
 
       const { data, error } = await supabase
         .from("event_members")
         .select("event_id, events(id,title,type,starts_at,location,surprise_mode)")
-        .eq("user_id", sess.session.user.id);
+        .eq("user_id", user.id);
 
       if (error) {
         setErr(error.message);
@@ -56,48 +57,80 @@ export default function EventsPage() {
     router.replace("/login");
   }
 
-  if (loading) return <div style={page}><Card>Loading…</Card></div>;
+  if (loading) {
+    return (
+      <div style={page}>
+        <Shell>
+          <Card>
+            <div style={{ color: "rgba(229,231,235,0.8)" }}>Loading…</div>
+          </Card>
+        </Shell>
+      </div>
+    );
+  }
 
   return (
     <div style={page}>
-      <div style={{ maxWidth: 900, margin: "0 auto", fontFamily: "system-ui", color: "#e5e7eb" }}>
+      <Shell>
         <Card>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
             <div>
-              <h1 style={{ margin: 0 }}>Your events</h1>
+              <h1 style={{ margin: 0, fontSize: 34 }}>Your events</h1>
               <div style={{ color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
-                Logged in as <b>{email}</b>
+                Logged in as <b style={{ color: "#e5e7eb" }}>{email}</b>
               </div>
             </div>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button style={btnPrimary} onClick={() => router.push("/events/new")}>+ New event</button>
-              <button style={btnGhost} onClick={() => router.push("/invites")}>Invites</button>
-              <button style={btnDanger} onClick={signOut}>Sign out</button>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <button style={btnPrimary} onClick={() => router.push("/events/new")}>
+                + New event
+              </button>
+              <button style={btnGhost} onClick={() => router.push("/invites")}>
+                Invites
+              </button>
+              <button style={btnGhost} onClick={signOut}>
+                Sign out
+              </button>
             </div>
           </div>
 
-          {err && <p style={{ color: "#fca5a5" }}>❌ {err}</p>}
+          {err && (
+            <div style={statusBox(false)}>
+              ❌ {err}
+            </div>
+          )}
 
-          <div style={{ marginTop: 14 }}>
+          <div style={{ marginTop: 16, display: "grid", gap: 12 }}>
             {events.length === 0 ? (
-              <p style={{ color: "rgba(229,231,235,0.75)" }}>No events yet. Create one!</p>
-            ) : (
-              <div style={{ display: "grid", gap: 10 }}>
-                {events.map((e) => (
-                  <a key={e.id} href={`/events/${e.id}`} style={eventRow}>
-                    <div style={{ fontWeight: 900 }}>{e.title}</div>
-                    <div style={{ color: "rgba(229,231,235,0.75)", fontSize: 13 }}>
-                      {e.type} {e.surprise_mode ? "• 🎁 surprise" : ""}
-                      {e.starts_at ? ` • ${new Date(e.starts_at).toLocaleString()}` : ""}
-                      {e.location ? ` • ${e.location}` : ""}
-                    </div>
-                  </a>
-                ))}
+              <div style={{ color: "rgba(229,231,235,0.75)" }}>
+                No events yet. Create one!
               </div>
+            ) : (
+              events.map((e) => (
+                <a key={e.id} href={`/events/${e.id}`} style={eventRow}>
+                  <div style={{ fontWeight: 900, fontSize: 18 }}>{e.title}</div>
+                  <div style={{ color: "rgba(229,231,235,0.75)", fontSize: 13, marginTop: 4 }}>
+                    {e.type}
+                    {e.surprise_mode ? " • 🎁 surprise" : ""}
+                    {e.starts_at ? ` • ${new Date(e.starts_at).toLocaleString()}` : ""}
+                    {e.location ? ` • ${e.location}` : ""}
+                  </div>
+                </a>
+              ))
             )}
           </div>
         </Card>
-      </div>
+      </Shell>
+    </div>
+  );
+}
+
+/* ================= UI HELPERS ================= */
+
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ maxWidth: 980, margin: "0 auto", paddingTop: 40, fontFamily: "system-ui" }}>
+      {children}
     </div>
   );
 }
@@ -106,11 +139,13 @@ function Card({ children }: { children: React.ReactNode }) {
   return (
     <div
       style={{
-        borderRadius: 18,
-        padding: 18,
+        borderRadius: 22,
+        padding: 20,
         background: "rgba(255,255,255,0.06)",
         border: "1px solid rgba(255,255,255,0.10)",
-        boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.45)",
+        color: "#e5e7eb",
+        backdropFilter: "blur(10px)",
       }}
     >
       {children}
@@ -118,16 +153,18 @@ function Card({ children }: { children: React.ReactNode }) {
   );
 }
 
+/* ================= STYLES ================= */
+
 const page: React.CSSProperties = {
   minHeight: "100vh",
-  background: "linear-gradient(180deg, #0b1020 0%, #0f172a 60%, #111827 100%)",
+  background: "radial-gradient(900px 500px at 50% 0%, rgba(124,58,237,0.45), transparent 60%), linear-gradient(180deg, #0b1020 0%, #0f172a 60%, #111827 100%)",
   padding: 24,
 };
 
 const btnPrimary: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.14)",
+  padding: "12px 14px",
+  borderRadius: 14,
+  border: "1px solid rgba(255,255,255,0.16)",
   background: "linear-gradient(90deg,#60a5fa,#a78bfa)",
   color: "#0b1020",
   fontWeight: 900,
@@ -135,31 +172,32 @@ const btnPrimary: React.CSSProperties = {
 };
 
 const btnGhost: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.14)",
+  padding: "12px 14px",
+  borderRadius: 14,
+  border: "1px solid rgba(255,255,255,0.16)",
   background: "rgba(255,255,255,0.06)",
   color: "#e5e7eb",
   fontWeight: 900,
   cursor: "pointer",
 };
 
-const btnDanger: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(248,113,113,0.15)",
-  color: "#fecaca",
-  fontWeight: 900,
-  cursor: "pointer",
-};
-
 const eventRow: React.CSSProperties = {
   display: "block",
-  padding: 12,
-  borderRadius: 14,
+  padding: 14,
+  borderRadius: 16,
   background: "rgba(255,255,255,0.05)",
   border: "1px solid rgba(255,255,255,0.10)",
   textDecoration: "none",
   color: "#e5e7eb",
 };
+
+function statusBox(ok: boolean): React.CSSProperties {
+  return {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 14,
+    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.12)",
+    color: ok ? "#86efac" : "#fca5a5",
+  };
+}

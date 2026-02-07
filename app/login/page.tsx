@@ -10,7 +10,31 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState("");
 
-  async function upsertProfile(fullName?: string) {
+  async function ensureProfileRow() {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return null;
+
+    const { data: sess } = await supabase.auth.getSession();
+    const user = sess.session?.user;
+    if (!user) return null;
+
+    // Create profile row if missing (but DO NOT overwrite name)
+    await supabase.from("profiles").upsert({
+      id: user.id,
+      avatar_url: null,
+    });
+
+    // Read current profile
+    const { data: prof } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", user.id)
+      .single();
+
+    return prof?.full_name ?? null;
+  }
+
+  async function setProfileName(fullName: string) {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
 
@@ -20,7 +44,7 @@ export default function LoginPage() {
 
     await supabase.from("profiles").upsert({
       id: user.id,
-      full_name: fullName ?? null,
+      full_name: fullName,
       avatar_url: null,
     });
   }
@@ -49,12 +73,11 @@ export default function LoginPage() {
 
     // If email confirmation is OFF -> immediate session exists
     if (data.session) {
-      await upsertProfile(`${fn} ${ln}`);
+      await setProfileName(`${fn} ${ln}`);
       window.location.href = "/events";
       return;
     }
 
-    // If confirmation ON, user must confirm then sign in
     setStatus("✅ Signed up! Confirm email, then sign in.");
   }
 
@@ -69,8 +92,14 @@ export default function LoginPage() {
       return;
     }
 
-    // If profile exists, keep it. If missing, create empty.
-    await upsertProfile();
+    const fullName = await ensureProfileRow();
+
+    // If name missing → force user to set it
+    if (!fullName) {
+      window.location.href = "/profile";
+      return;
+    }
+
     window.location.href = "/events";
   }
 
@@ -109,13 +138,13 @@ export default function LoginPage() {
           <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <input
-                placeholder="First name"
+                placeholder="First name (signup)"
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
                 style={inputStyle}
               />
               <input
-                placeholder="Last name"
+                placeholder="Last name (signup)"
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
                 style={inputStyle}

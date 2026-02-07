@@ -23,6 +23,7 @@ type ItemRow = {
   title: string;
   notes: string | null;
   claim_mode: "single" | "multi";
+  created_by: string;
   created_at?: string;
 };
 
@@ -46,6 +47,22 @@ type FriendRow = {
   friend_name: string | null;
 };
 
+type MemberRow = {
+  user_id: string;
+  full_name: string | null;
+  email: string | null;
+};
+
+type MsgRow = {
+  id: string;
+  event_id: string;
+  sender_id: string;
+  visibility: "general" | "secret";
+  body: string;
+  created_at: string;
+  full_name: string | null;
+};
+
 /* ================= PAGE ================= */
 
 export default function EventPage() {
@@ -53,19 +70,28 @@ export default function EventPage() {
   const router = useRouter();
 
   const [me, setMe] = useState<{ id: string; email?: string } | null>(null);
+
   const [event, setEvent] = useState<EventRow | null>(null);
   const [items, setItems] = useState<ItemRow[]>([]);
   const [claims, setClaims] = useState<ClaimRow[]>([]);
   const [invites, setInvites] = useState<InviteRow[]>([]);
   const [friends, setFriends] = useState<FriendRow[]>([]);
+  const [members, setMembers] = useState<MemberRow[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("");
 
+  // Items
   const [newItemTitle, setNewItemTitle] = useState("");
   const [newItemNotes, setNewItemNotes] = useState("");
   const [newItemMode, setNewItemMode] = useState<"single" | "multi">("single");
 
+  const [editItemId, setEditItemId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  const [editMode, setEditMode] = useState<"single" | "multi">("single");
+
+  // Invites
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteStatus, setInviteStatus] = useState("");
 
@@ -73,7 +99,24 @@ export default function EventPage() {
   const [selectedFriendIds, setSelectedFriendIds] = useState<Record<string, boolean>>({});
   const [bulkStatus, setBulkStatus] = useState("");
 
+  // Delete event with password
+  const [deletePw, setDeletePw] = useState("");
+  const [deleteStatus, setDeleteStatus] = useState("");
+
+  // Leave event
+  const [leaveStatus, setLeaveStatus] = useState("");
+
+  // Chat
+  const [chatTab, setChatTab] = useState<"general" | "secret">("general");
+  const [messages, setMessages] = useState<MsgRow[]>([]);
+  const [msgText, setMsgText] = useState("");
+  const [chatStatus, setChatStatus] = useState("");
+
   /* ================= HELPERS ================= */
+
+  const isCreator = me?.id === event?.creator_id;
+  const hideClaims = !!event?.surprise_mode && !!isCreator;
+  const isBirthday = event?.type === "birthday";
 
   const claimsByItem = useMemo(() => {
     const map = new Map<string, ClaimRow[]>();
@@ -85,12 +128,9 @@ export default function EventPage() {
     return map;
   }, [claims]);
 
-  function displayName(c: ClaimRow) {
-    return c.full_name ?? c.user_id.slice(0, 6);
+  function displayNameByUser(userId: string, fullName: string | null) {
+    return fullName ?? userId.slice(0, 6);
   }
-
-  const isCreator = me?.id === event?.creator_id;
-  const hideClaims = !!event?.surprise_mode && !!isCreator;
 
   const selectedFriends = useMemo(() => {
     const ids = Object.keys(selectedFriendIds).filter((k) => selectedFriendIds[k]);
@@ -112,6 +152,9 @@ export default function EventPage() {
     setStatus("");
     setInviteStatus("");
     setBulkStatus("");
+    setDeleteStatus("");
+    setLeaveStatus("");
+    setChatStatus("");
 
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
@@ -147,7 +190,7 @@ export default function EventPage() {
     }
     setItems((it.data ?? []) as ItemRow[]);
 
-    // Claims (manual join names)
+    // Claims (manual join profiles for names)
     const cl = await supabase
       .from("item_claims")
       .select("id,event_item_id,user_id,created_at")
@@ -156,24 +199,24 @@ export default function EventPage() {
 
     const rawClaims = (cl.data ?? []) as { id: string; event_item_id: string; user_id: string }[];
 
-    const userIds = [...new Set(rawClaims.map((c) => c.user_id))];
+    const claimUserIds = [...new Set(rawClaims.map((c) => c.user_id))];
     const profilesMap = new Map<string, string>();
 
-    if (userIds.length > 0) {
-      const pr = await supabase.from("profiles").select("id, full_name").in("id", userIds);
+    if (claimUserIds.length > 0) {
+      const pr = await supabase.from("profiles").select("id, full_name").in("id", claimUserIds);
       (pr.data ?? []).forEach((p: any) => {
-        if (p?.id && p?.full_name) profilesMap.set(p.id, p.full_name);
+        if (p?.id) profilesMap.set(p.id, p?.full_name ?? null);
       });
     }
 
-    const mergedClaims: ClaimRow[] = rawClaims.map((c) => ({
-      id: c.id,
-      event_item_id: c.event_item_id,
-      user_id: c.user_id,
-      full_name: profilesMap.get(c.user_id) ?? null,
-    }));
-
-    setClaims(mergedClaims);
+    setClaims(
+      rawClaims.map((c) => ({
+        id: c.id,
+        event_item_id: c.event_item_id,
+        user_id: c.user_id,
+        full_name: profilesMap.get(c.user_id) ?? null,
+      }))
+    );
 
     // Invites
     const inv = await supabase
@@ -193,7 +236,6 @@ export default function EventPage() {
     const frList = (fr.data ?? []) as FriendRow[];
     setFriends(frList);
 
-    // remove selected ids that no longer exist
     setSelectedFriendIds((prev) => {
       const allowed = new Set(frList.map((f) => f.id));
       const next: Record<string, boolean> = {};
@@ -203,7 +245,63 @@ export default function EventPage() {
       return next;
     });
 
+    // Members list (“coming”)
+    const mem = await supabase
+      .from("event_members")
+      .select("user_id")
+      .eq("event_id", eventId);
+
+    const memberIds = (mem.data ?? []).map((m: any) => m.user_id);
+    const membersProfiles = new Map<string, { full_name: string | null }>();
+
+    if (memberIds.length > 0) {
+      const pr2 = await supabase.from("profiles").select("id, full_name").in("id", memberIds);
+      (pr2.data ?? []).forEach((p: any) => membersProfiles.set(p.id, { full_name: p.full_name ?? null }));
+    }
+
+    // We don’t have email for other users unless you store it in profiles.
+    // So “email” will be null for everyone except you.
+    setMembers(
+      memberIds.map((uid: string) => ({
+        user_id: uid,
+        full_name: membersProfiles.get(uid)?.full_name ?? null,
+        email: uid === user.id ? user.email ?? null : null,
+      }))
+    );
+
+    // Chat messages for current tab
+    await loadMessages(chatTab);
+
     setLoading(false);
+  }
+
+  async function loadMessages(tab: "general" | "secret") {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    const msg = await supabase
+      .from("event_messages")
+      .select("id,event_id,sender_id,visibility,body,created_at")
+      .eq("event_id", eventId)
+      .eq("visibility", tab)
+      .order("created_at", { ascending: true });
+
+    const raw = (msg.data ?? []) as any[];
+
+    const ids = [...new Set(raw.map((m) => m.sender_id))];
+    const profilesMap = new Map<string, string>();
+
+    if (ids.length > 0) {
+      const pr = await supabase.from("profiles").select("id, full_name").in("id", ids);
+      (pr.data ?? []).forEach((p: any) => profilesMap.set(p.id, p.full_name ?? null));
+    }
+
+    setMessages(
+      raw.map((m) => ({
+        ...m,
+        full_name: profilesMap.get(m.sender_id) ?? null,
+      })) as MsgRow[]
+    );
   }
 
   useEffect(() => {
@@ -217,8 +315,9 @@ export default function EventPage() {
   /* ================= ACTIONS: ITEMS ================= */
 
   async function addItem() {
+    setStatus("");
     const title = newItemTitle.trim();
-    if (!title) return;
+    if (!title || !me) return;
 
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
@@ -228,6 +327,7 @@ export default function EventPage() {
       title,
       notes: newItemNotes.trim() ? newItemNotes.trim() : null,
       claim_mode: newItemMode,
+      created_by: me.id,
     });
 
     if (res.error) {
@@ -242,7 +342,62 @@ export default function EventPage() {
     await loadAll();
   }
 
+  function startEdit(it: ItemRow) {
+    setEditItemId(it.id);
+    setEditTitle(it.title);
+    setEditNotes(it.notes ?? "");
+    setEditMode(it.claim_mode);
+    setStatus("");
+  }
+
+  function cancelEdit() {
+    setEditItemId(null);
+    setEditTitle("");
+    setEditNotes("");
+    setEditMode("single");
+  }
+
+  async function saveEdit() {
+    if (!editItemId) return;
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    const res = await supabase
+      .from("event_items")
+      .update({
+        title: editTitle.trim(),
+        notes: editNotes.trim() ? editNotes.trim() : null,
+        claim_mode: editMode,
+      })
+      .eq("id", editItemId)
+      .eq("event_id", eventId);
+
+    if (res.error) {
+      setStatus(`❌ ${res.error.message}`);
+      return;
+    }
+
+    setStatus("✅ Item updated");
+    cancelEdit();
+    await loadAll();
+  }
+
+  async function deleteItem(itemId: string) {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    const res = await supabase.from("event_items").delete().eq("id", itemId).eq("event_id", eventId);
+    if (res.error) {
+      setStatus(`❌ ${res.error.message}`);
+      return;
+    }
+
+    setStatus("✅ Item deleted");
+    await loadAll();
+  }
+
   async function claim(itemId: string) {
+    setStatus("");
     const supabase = getSupabaseBrowserClient();
     if (!supabase || !me) return;
 
@@ -262,6 +417,7 @@ export default function EventPage() {
   }
 
   async function unclaim(itemId: string) {
+    setStatus("");
     const supabase = getSupabaseBrowserClient();
     if (!supabase || !me) return;
 
@@ -301,7 +457,6 @@ export default function EventPage() {
     });
 
     if (res.error) {
-      // If you added unique index, duplicates will show here — we treat it as "already invited"
       const msg = res.error.message.toLowerCase();
       if (msg.includes("duplicate") || msg.includes("unique")) {
         return { ok: true, message: `Already invited: ${clean}` };
@@ -346,7 +501,6 @@ export default function EventPage() {
 
     setBulkStatus("Inviting selected…");
 
-    // Send invites sequentially (safer for rate limits)
     const okMsgs: string[] = [];
     const badMsgs: string[] = [];
 
@@ -364,6 +518,110 @@ export default function EventPage() {
     }
 
     await loadAll();
+  }
+
+  async function uninvite(inviteId: string) {
+    setInviteStatus("");
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    const res = await supabase.from("event_invites").delete().eq("id", inviteId).eq("event_id", eventId);
+    if (res.error) {
+      setInviteStatus(`❌ ${res.error.message}`);
+      return;
+    }
+
+    setInviteStatus("✅ Uninvited");
+    await loadAll();
+  }
+
+  /* ================= LEAVE EVENT ================= */
+
+  async function leaveEvent() {
+    setLeaveStatus("");
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    setLeaveStatus("Leaving…");
+    const res = await supabase.rpc("leave_event", { eid: eventId });
+    if (res.error) {
+      setLeaveStatus(`❌ ${res.error.message}`);
+      return;
+    }
+
+    setLeaveStatus("✅ Left event (claims released)");
+    router.push("/events");
+  }
+
+  /* ================= DELETE EVENT (creator + password required) ================= */
+
+  async function deleteEventWithPassword() {
+    if (!event || !me?.email) return;
+
+    const pw = deletePw.trim();
+    if (!pw) {
+      setDeleteStatus("❌ Enter your password");
+      return;
+    }
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    setDeleteStatus("Re-authenticating…");
+
+    const { error: reauthErr } = await supabase.auth.signInWithPassword({
+      email: me.email!,
+      password: pw,
+    });
+
+    if (reauthErr) {
+      setDeleteStatus(`❌ ${reauthErr.message}`);
+      return;
+    }
+
+    setDeleteStatus("Deleting event…");
+    const del = await supabase.from("events").delete().eq("id", eventId);
+
+    if (del.error) {
+      setDeleteStatus(`❌ ${del.error.message}`);
+      return;
+    }
+
+    setDeleteStatus("✅ Deleted");
+    router.push("/events");
+  }
+
+  /* ================= CHAT ================= */
+
+  async function switchTab(tab: "general" | "secret") {
+    setChatTab(tab);
+    await loadMessages(tab);
+  }
+
+  async function sendMessage() {
+    setChatStatus("");
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase || !me) return;
+
+    const body = msgText.trim();
+    if (!body) return;
+
+    setChatStatus("Sending…");
+    const res = await supabase.from("event_messages").insert({
+      event_id: eventId,
+      sender_id: me.id,
+      visibility: chatTab,
+      body,
+    });
+
+    if (res.error) {
+      setChatStatus(`❌ ${res.error.message}`);
+      return;
+    }
+
+    setMsgText("");
+    setChatStatus("✅ Sent");
+    await loadMessages(chatTab);
   }
 
   /* ================= UI ================= */
@@ -384,7 +642,7 @@ export default function EventPage() {
 
   return (
     <div style={pageStyle}>
-      <div style={{ maxWidth: 900, margin: "0 auto", color: "#e5e7eb", fontFamily: "system-ui" }}>
+      <div style={{ maxWidth: 980, margin: "0 auto", color: "#e5e7eb", fontFamily: "system-ui" }}>
         <a href="/events" style={linkStyle}>← Back to events</a>
 
         <Card>
@@ -397,56 +655,81 @@ export default function EventPage() {
               {event.starts_at && <div style={{ marginTop: 6 }}>🗓 {new Date(event.starts_at).toLocaleString()}</div>}
               {event.location && <div style={{ marginTop: 6 }}>📍 {event.location}</div>}
             </div>
-            {me?.email && (
-              <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
-                Signed in as <b>{me.email}</b>
-                {" "}•{" "}
-                <a href="/invites" style={{ color: "#93c5fd", textDecoration: "none" }}>Invites</a>
-                {" "}•{" "}
-                <a href="/profile" style={{ color: "#93c5fd", textDecoration: "none" }}>Profile</a>
+
+            <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
+              {me?.email ? <>Signed in as <b>{me.email}</b></> : null}
+              <div style={{ marginTop: 6 }}>
+                <a href="/profile" style={navLink}>Profile</a>{" "}
+                <a href="/invites" style={navLink}>Invites</a>
               </div>
-            )}
+            </div>
           </div>
 
           {event.description && <p style={{ marginTop: 12, color: "rgba(229,231,235,0.85)" }}>{event.description}</p>}
         </Card>
 
+        {/* PEOPLE COMING */}
+        <Card>
+          <h2 style={{ marginTop: 0 }}>People coming</h2>
+          <div style={{ display: "grid", gap: 10 }}>
+            {members.length === 0 ? (
+              <div style={{ color: "rgba(229,231,235,0.75)" }}>No members found.</div>
+            ) : (
+              members.map((m) => (
+                <div key={m.user_id} style={rowStyle}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 900 }}>
+                      {displayNameByUser(m.user_id, m.full_name)}
+                      {m.user_id === event.creator_id ? " (creator)" : ""}
+                      {m.user_id === me?.id ? " (you)" : ""}
+                    </div>
+                    {m.email ? <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>{m.email}</div> : null}
+                  </div>
+                </div>
+              ))
+            )}
+
+            {/* Leave event */}
+            {!isCreator && (
+              <div style={{ marginTop: 8 }}>
+                <button onClick={leaveEvent} style={btnDanger}>
+                  Leave event
+                </button>
+                {leaveStatus && <div style={statusBoxStyle(leaveStatus.startsWith("✅"))}>{leaveStatus}</div>}
+              </div>
+            )}
+          </div>
+        </Card>
+
         {/* INVITES */}
         {isCreator && (
           <Card>
-            <h2 style={{ marginTop: 0 }}>Invite people</h2>
+            <h2 style={{ marginTop: 0 }}>Invites</h2>
 
-            <p style={{ color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
-              Invite one friend, or select many and invite all at once.
-            </p>
-
-            {/* Multi invite checkboxes */}
-            <div style={{ marginTop: 12 }}>
-              <div style={{ fontWeight: 900, marginBottom: 8 }}>Your friends</div>
+            {/* Multi-invite */}
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontWeight: 900, marginBottom: 8 }}>Invite multiple friends</div>
 
               {friends.length === 0 ? (
                 <div style={{ color: "rgba(229,231,235,0.75)" }}>
-                  No friends yet. Add them in <a href="/profile" style={{ color: "#93c5fd", textDecoration: "none" }}>/profile</a>.
+                  No friends yet. Add them in <a href="/profile" style={navLink}>/profile</a>.
                 </div>
               ) : (
                 <div style={{ display: "grid", gap: 8 }}>
-                  {friends.map((f) => {
-                    const checked = !!selectedFriendIds[f.id];
-                    return (
-                      <label key={f.id} style={friendRow}>
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleFriend(f.id)}
-                          style={{ width: 18, height: 18 }}
-                        />
-                        <div style={{ display: "flex", flexDirection: "column" }}>
-                          <b>{f.friend_name ? f.friend_name : f.friend_email}</b>
-                          <span style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>{f.friend_email}</span>
-                        </div>
-                      </label>
-                    );
-                  })}
+                  {friends.map((f) => (
+                    <label key={f.id} style={friendRow}>
+                      <input
+                        type="checkbox"
+                        checked={!!selectedFriendIds[f.id]}
+                        onChange={() => toggleFriend(f.id)}
+                        style={{ width: 18, height: 18 }}
+                      />
+                      <div style={{ display: "flex", flexDirection: "column" }}>
+                        <b>{f.friend_name ? f.friend_name : f.friend_email}</b>
+                        <span style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>{f.friend_email}</span>
+                      </div>
+                    </label>
+                  ))}
                 </div>
               )}
 
@@ -459,16 +742,12 @@ export default function EventPage() {
                 </button>
               </div>
 
-              {bulkStatus && (
-                <div style={statusBoxStyle(bulkStatus.startsWith("✅"))}>
-                  {bulkStatus}
-                </div>
-              )}
+              {bulkStatus && <div style={statusBoxStyle(bulkStatus.startsWith("✅"))}>{bulkStatus}</div>}
             </div>
 
             <hr style={hrStyle} />
 
-            {/* Single invite dropdown + email */}
+            {/* Single invite */}
             <div style={{ display: "grid", gap: 10 }}>
               <select
                 value=""
@@ -498,9 +777,7 @@ export default function EventPage() {
                 </button>
               </div>
 
-              {inviteStatus && (
-                <div style={statusBoxStyle(inviteStatus.startsWith("✅"))}>{inviteStatus}</div>
-              )}
+              {inviteStatus && <div style={statusBoxStyle(inviteStatus.startsWith("✅"))}>{inviteStatus}</div>}
             </div>
 
             <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
@@ -515,6 +792,10 @@ export default function EventPage() {
                         {inv.accepted ? "✅ Accepted" : "Pending"} • {new Date(inv.created_at).toLocaleString()}
                       </div>
                     </div>
+
+                    <button style={btnDangerSmall} onClick={() => uninvite(inv.id)}>
+                      Uninvite
+                    </button>
                   </div>
                 ))
               )}
@@ -551,11 +832,7 @@ export default function EventPage() {
               </button>
             </div>
 
-            {status && (
-              <div style={statusBoxStyle(status.startsWith("✅"))}>
-                {status}
-              </div>
-            )}
+            {status && <div style={statusBoxStyle(status.startsWith("✅"))}>{status}</div>}
           </div>
 
           <hr style={hrStyle} />
@@ -568,46 +845,166 @@ export default function EventPage() {
                 const cs = claimsByItem.get(it.id) ?? [];
                 const iClaimed = !!me && cs.some((c) => c.user_id === me.id);
 
+                const canEdit = !!me && (it.created_by === me.id || isCreator);
+
                 const claimText = hideClaims
                   ? "🎁 Surprise mode: creator can’t see claims"
                   : cs.length === 0
                     ? "Not claimed yet"
                     : it.claim_mode === "single"
-                      ? `Claimed by ${displayName(cs[0])}`
-                      : `Claimed by ${cs.map(displayName).join(", ")}`;
+                      ? `Claimed by ${displayNameByUser(cs[0].user_id, cs[0].full_name)}`
+                      : `Claimed by ${cs.map((c) => displayNameByUser(c.user_id, c.full_name)).join(", ")}`;
+
+                const editing = editItemId === it.id;
 
                 return (
                   <div key={it.id} style={itemRowStyle}>
                     <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                        <b style={{ fontSize: 16 }}>{it.title}</b>
-                        <span style={pillStyle(it.claim_mode === "multi" ? "#34d399" : "#60a5fa")}>
-                          {it.claim_mode.toUpperCase()}
-                        </span>
-                      </div>
-                      {it.notes && <div style={{ marginTop: 6, color: "rgba(229,231,235,0.75)" }}>{it.notes}</div>}
-                      <div style={{ marginTop: 8, color: "rgba(229,231,235,0.82)", fontSize: 13 }}>
-                        {claimText}
-                      </div>
-                    </div>
+                      {editing ? (
+                        <div style={{ display: "grid", gap: 8 }}>
+                          <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={inputStyle} />
+                          <input value={editNotes} onChange={(e) => setEditNotes(e.target.value)} style={inputStyle} />
+                          <select value={editMode} onChange={(e) => setEditMode(e.target.value as any)} style={inputStyle}>
+                            <option value="single">Single claim</option>
+                            <option value="multi">Multi claim</option>
+                          </select>
 
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      {!iClaimed ? (
-                        <button onClick={() => claim(it.id)} style={smallBtnStyle}>
-                          Claim
-                        </button>
+                          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                            <button style={btnPrimary} onClick={saveEdit}>Save</button>
+                            <button style={btnGhost} onClick={cancelEdit}>Cancel</button>
+                          </div>
+                        </div>
                       ) : (
-                        <button onClick={() => unclaim(it.id)} style={smallBtnDangerStyle}>
-                          Unclaim
-                        </button>
+                        <>
+                          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                            <b style={{ fontSize: 16 }}>{it.title}</b>
+                            <span style={pillStyle(it.claim_mode === "multi" ? "#34d399" : "#60a5fa")}>
+                              {it.claim_mode.toUpperCase()}
+                            </span>
+                            {canEdit ? (
+                              <span style={{ fontSize: 12, color: "rgba(229,231,235,0.7)" }}>
+                                (you can edit)
+                              </span>
+                            ) : null}
+                          </div>
+
+                          {it.notes && <div style={{ marginTop: 6, color: "rgba(229,231,235,0.75)" }}>{it.notes}</div>}
+
+                          <div style={{ marginTop: 8, color: "rgba(229,231,235,0.82)", fontSize: 13 }}>
+                            {claimText}
+                          </div>
+                        </>
                       )}
                     </div>
+
+                    {!editing && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+                        {!iClaimed ? (
+                          <button onClick={() => claim(it.id)} style={smallBtnStyle}>Claim</button>
+                        ) : (
+                          <button onClick={() => unclaim(it.id)} style={smallBtnDangerStyle}>Unclaim</button>
+                        )}
+
+                        {canEdit && (
+                          <>
+                            <button
+                              onClick={() => startEdit(it)}
+                              style={btnGhostSmall}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => deleteItem(it.id)}
+                              style={btnDangerSmall}
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
           )}
         </Card>
+
+        {/* CHAT */}
+        <Card>
+          <h2 style={{ marginTop: 0 }}>Chat</h2>
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button
+              onClick={() => switchTab("general")}
+              style={chatTab === "general" ? btnPrimary : btnGhost}
+            >
+              General
+            </button>
+
+            {isBirthday && (
+              <button
+                onClick={() => switchTab("secret")}
+                style={chatTab === "secret" ? btnPrimary : btnGhost}
+              >
+                Secret (creator can’t read)
+              </button>
+            )}
+          </div>
+
+          <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+            <div style={chatBox}>
+              {messages.length === 0 ? (
+                <div style={{ color: "rgba(229,231,235,0.7)" }}>No messages yet.</div>
+              ) : (
+                messages.map((m) => (
+                  <div key={m.id} style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
+                      <b>{displayNameByUser(m.sender_id, m.full_name)}</b> • {new Date(m.created_at).toLocaleString()}
+                    </div>
+                    <div style={{ marginTop: 3 }}>{m.body}</div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <textarea
+              value={msgText}
+              onChange={(e) => setMsgText(e.target.value)}
+              placeholder="Write a message…"
+              style={{ ...inputStyle, minHeight: 90 }}
+            />
+
+            <button style={btnPrimary} onClick={sendMessage}>
+              Send
+            </button>
+
+            {chatStatus && <div style={statusBoxStyle(chatStatus.startsWith("✅"))}>{chatStatus}</div>}
+          </div>
+        </Card>
+
+        {/* DELETE EVENT */}
+        {isCreator && (
+          <Card>
+            <h2 style={{ marginTop: 0, color: "#fecaca" }}>Danger zone</h2>
+            <p style={{ color: "rgba(229,231,235,0.75)" }}>
+              Delete event (requires your password).
+            </p>
+
+            <input
+              type="password"
+              value={deletePw}
+              onChange={(e) => setDeletePw(e.target.value)}
+              placeholder="Your password"
+              style={inputStyle}
+            />
+            <button onClick={deleteEventWithPassword} style={btnDanger}>
+              Delete event permanently
+            </button>
+
+            {deleteStatus && <div style={statusBoxStyle(deleteStatus.startsWith("✅"))}>{deleteStatus}</div>}
+          </Card>
+        )}
       </div>
     </div>
   );
@@ -637,6 +1034,8 @@ const pageStyle: React.CSSProperties = {
   background: "linear-gradient(180deg, #0b1020 0%, #0f172a 60%, #111827 100%)",
   padding: 24,
 };
+
+const navLink: React.CSSProperties = { color: "#93c5fd", textDecoration: "none", marginRight: 10 };
 
 const linkStyle: React.CSSProperties = { color: "#93c5fd", textDecoration: "none", fontFamily: "system-ui" };
 
@@ -685,6 +1084,16 @@ const friendRow: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
 };
 
+const chatBox: React.CSSProperties = {
+  borderRadius: 14,
+  border: "1px solid rgba(255,255,255,0.10)",
+  background: "rgba(0,0,0,0.18)",
+  padding: 12,
+  minHeight: 220,
+  maxHeight: 320,
+  overflowY: "auto",
+};
+
 function pillStyle(color: string): React.CSSProperties {
   return {
     fontSize: 12,
@@ -726,6 +1135,39 @@ const btnGhost: React.CSSProperties = {
   color: "#e5e7eb",
   fontWeight: 900,
   cursor: "pointer",
+};
+
+const btnDanger: React.CSSProperties = {
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(248,113,113,0.18)",
+  color: "#fecaca",
+  fontWeight: 900,
+  cursor: "pointer",
+  marginTop: 10,
+};
+
+const btnGhostSmall: React.CSSProperties = {
+  padding: "8px 10px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(255,255,255,0.06)",
+  color: "#e5e7eb",
+  fontWeight: 900,
+  cursor: "pointer",
+  fontSize: 12,
+};
+
+const btnDangerSmall: React.CSSProperties = {
+  padding: "8px 10px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(248,113,113,0.18)",
+  color: "#fecaca",
+  fontWeight: 900,
+  cursor: "pointer",
+  fontSize: 12,
 };
 
 const smallBtnStyle: React.CSSProperties = {

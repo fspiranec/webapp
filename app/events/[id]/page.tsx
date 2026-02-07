@@ -28,9 +28,7 @@ type ClaimRow = {
   id: string;
   event_item_id: string;
   user_id: string;
-  profiles: {
-    full_name: string | null;
-  } | null;
+  profiles: { full_name: string | null }[]; // ✅ array
 };
 
 /* ================= PAGE ================= */
@@ -49,8 +47,6 @@ export default function EventPage() {
   const [newItemTitle, setNewItemTitle] = useState("");
   const [newItemNotes, setNewItemNotes] = useState("");
   const [newItemMode, setNewItemMode] = useState<"single" | "multi">("single");
-
-  /* ================= DATA LOAD ================= */
 
   async function loadAll() {
     setLoading(true);
@@ -78,22 +74,22 @@ export default function EventPage() {
       .eq("event_id", eventId)
       .order("created_at");
 
-    setItems(it.data ?? []);
+    setItems((it.data ?? []) as any);
 
     const cl = await supabase
       .from("item_claims")
       .select("id,event_item_id,user_id,profiles:profiles(full_name)")
       .eq("event_id", eventId);
 
-    setClaims(cl.data ?? []);
+    setClaims((cl.data ?? []) as any);
+
     setLoading(false);
   }
 
   useEffect(() => {
     loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
-
-  /* ================= HELPERS ================= */
 
   const claimsByItem = useMemo(() => {
     const map = new Map<string, ClaimRow[]>();
@@ -106,13 +102,12 @@ export default function EventPage() {
   }, [claims]);
 
   function displayName(c: ClaimRow) {
-    return c.profiles?.full_name ?? c.user_id.slice(0, 6);
+    const full = c.profiles?.[0]?.full_name;
+    return full ?? c.user_id.slice(0, 6);
   }
 
   const isCreator = me?.id === event?.creator_id;
   const hideClaims = event?.surprise_mode && isCreator;
-
-  /* ================= ACTIONS ================= */
 
   async function addItem() {
     if (!newItemTitle.trim()) return;
@@ -171,8 +166,6 @@ export default function EventPage() {
     loadAll();
   }
 
-  /* ================= UI ================= */
-
   if (loading) return <div style={page}>Loading…</div>;
   if (!event) return <div style={page}>Event not found</div>;
 
@@ -220,10 +213,10 @@ export default function EventPage() {
                       {hideClaims
                         ? "🎁 Surprise mode"
                         : cs.length === 0
-                        ? "Not claimed yet"
-                        : it.claim_mode === "single"
-                        ? `Claimed by ${displayName(cs[0])}`
-                        : `Claimed by ${cs.map(displayName).join(", ")}`}
+                          ? "Not claimed yet"
+                          : it.claim_mode === "single"
+                            ? `Claimed by ${displayName(cs[0])}`
+                            : `Claimed by ${cs.map(displayName).join(", ")}`}
                     </div>
                   </div>
 

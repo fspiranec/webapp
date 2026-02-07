@@ -60,7 +60,7 @@ export default function EventsPage() {
 
   return (
     <div style={page}>
-      <div style={{ maxWidth: 880, margin: "0 auto", fontFamily: "system-ui", color: "#e5e7eb" }}>
+      <div style={{ maxWidth: 900, margin: "0 auto", fontFamily: "system-ui", color: "#e5e7eb" }}>
         <Card>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
             <div>
@@ -69,9 +69,10 @@ export default function EventsPage() {
                 Logged in as <b>{email}</b>
               </div>
             </div>
-            <div style={{ display: "flex", gap: 10 }}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <button style={btnPrimary} onClick={() => router.push("/events/new")}>+ New event</button>
-              <button style={btnGhost} onClick={signOut}>Sign out</button>
+              <button style={btnGhost} onClick={() => router.push("/invites")}>Invites</button>
+              <button style={btnDanger} onClick={signOut}>Sign out</button>
             </div>
           </div>
 
@@ -84,7 +85,7 @@ export default function EventsPage() {
               <div style={{ display: "grid", gap: 10 }}>
                 {events.map((e) => (
                   <a key={e.id} href={`/events/${e.id}`} style={eventRow}>
-                    <div style={{ fontWeight: 800 }}>{e.title}</div>
+                    <div style={{ fontWeight: 900 }}>{e.title}</div>
                     <div style={{ color: "rgba(229,231,235,0.75)", fontSize: 13 }}>
                       {e.type} {e.surprise_mode ? "• 🎁 surprise" : ""}
                       {e.starts_at ? ` • ${new Date(e.starts_at).toLocaleString()}` : ""}
@@ -103,13 +104,15 @@ export default function EventsPage() {
 
 function Card({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{
-      borderRadius: 18,
-      padding: 18,
-      background: "rgba(255,255,255,0.06)",
-      border: "1px solid rgba(255,255,255,0.10)",
-      boxShadow: "0 10px 30px rgba(0,0,0,0.35)"
-    }}>
+    <div
+      style={{
+        borderRadius: 18,
+        padding: 18,
+        background: "rgba(255,255,255,0.06)",
+        border: "1px solid rgba(255,255,255,0.10)",
+        boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+      }}
+    >
       {children}
     </div>
   );
@@ -127,7 +130,7 @@ const btnPrimary: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.14)",
   background: "linear-gradient(90deg,#60a5fa,#a78bfa)",
   color: "#0b1020",
-  fontWeight: 800,
+  fontWeight: 900,
   cursor: "pointer",
 };
 
@@ -137,7 +140,17 @@ const btnGhost: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.14)",
   background: "rgba(255,255,255,0.06)",
   color: "#e5e7eb",
-  fontWeight: 800,
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const btnDanger: React.CSSProperties = {
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(248,113,113,0.15)",
+  color: "#fecaca",
+  fontWeight: 900,
   cursor: "pointer",
 };
 

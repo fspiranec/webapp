@@ -30,7 +30,6 @@ type PollVoteRow = {
   created_at: string;
 };
 
-
 type EventRow = {
   id: string;
   creator_id: string;
@@ -103,10 +102,10 @@ export default function EventPage() {
   const [friends, setFriends] = useState<FriendRow[]>([]);
   const [members, setMembers] = useState<MemberRow[]>([]);
 
+  // Polls
   const [polls, setPolls] = useState<PollRow[]>([]);
   const [pollOptions, setPollOptions] = useState<PollOptionRow[]>([]);
   const [pollVotes, setPollVotes] = useState<PollVoteRow[]>([]);
-
 
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("");
@@ -227,16 +226,24 @@ export default function EventPage() {
       .eq("event_id", eventId)
       .order("created_at", { ascending: true });
 
+    if (cl.error) {
+      setStatus(`❌ ${cl.error.message}`);
+      setLoading(false);
+      return;
+    }
+
     const rawClaims = (cl.data ?? []) as { id: string; event_item_id: string; user_id: string }[];
 
     const claimUserIds = [...new Set(rawClaims.map((c) => c.user_id))];
-    const profilesMap = new Map<string, string>();
+    const profilesMap = new Map<string, string | null>();
 
     if (claimUserIds.length > 0) {
       const pr = await supabase.from("profiles").select("id, full_name").in("id", claimUserIds);
-      (pr.data ?? []).forEach((p: any) => {
-        if (p?.id) profilesMap.set(p.id, p?.full_name ?? null);
-      });
+      if (!pr.error) {
+        (pr.data ?? []).forEach((p: any) => {
+          if (p?.id) profilesMap.set(p.id, p?.full_name ?? null);
+        });
+      }
     }
 
     setClaims(
@@ -258,10 +265,7 @@ export default function EventPage() {
     setInvites((inv.data ?? []) as InviteRow[]);
 
     // Friends
-    const fr = await supabase
-      .from("friends")
-      .select("id,friend_email,friend_name")
-      .order("created_at", { ascending: false });
+    const fr = await supabase.from("friends").select("id,friend_email,friend_name").order("created_at", { ascending: false });
 
     const frList = (fr.data ?? []) as FriendRow[];
     setFriends(frList);
@@ -276,21 +280,15 @@ export default function EventPage() {
     });
 
     // Members list (“coming”)
-    const mem = await supabase
-      .from("event_members")
-      .select("user_id")
-      .eq("event_id", eventId);
-
+    const mem = await supabase.from("event_members").select("user_id").eq("event_id", eventId);
     const memberIds = (mem.data ?? []).map((m: any) => m.user_id);
-    const membersProfiles = new Map<string, { full_name: string | null }>();
 
+    const membersProfiles = new Map<string, { full_name: string | null }>();
     if (memberIds.length > 0) {
       const pr2 = await supabase.from("profiles").select("id, full_name").in("id", memberIds);
       (pr2.data ?? []).forEach((p: any) => membersProfiles.set(p.id, { full_name: p.full_name ?? null }));
     }
 
-    // We don’t have email for other users unless you store it in profiles.
-    // So “email” will be null for everyone except you.
     setMembers(
       memberIds.map((uid: string) => ({
         user_id: uid,
@@ -298,6 +296,37 @@ export default function EventPage() {
         email: uid === user.id ? user.email ?? null : null,
       }))
     );
+
+    // ===== POLLS (must be INSIDE loadAll) =====
+    const p = await supabase
+      .from("event_polls")
+      .select("id,event_id,question,mode,created_by,created_at")
+      .eq("event_id", eventId)
+      .order("created_at", { ascending: false });
+
+    setPolls((p.data ?? []) as any);
+
+    const pollIds = (p.data ?? []).map((x: any) => x.id);
+
+    if (pollIds.length === 0) {
+      setPollOptions([]);
+      setPollVotes([]);
+    } else {
+      const o = await supabase
+        .from("event_poll_options")
+        .select("id,poll_id,label")
+        .in("poll_id", pollIds)
+        .order("created_at", { ascending: true });
+
+      setPollOptions((o.data ?? []) as any);
+
+      const v = await supabase
+        .from("event_poll_votes")
+        .select("id,event_id,poll_id,option_id,user_id,created_at")
+        .eq("event_id", eventId);
+
+      setPollVotes((v.data ?? []) as any);
+    }
 
     // Chat messages for current tab
     await loadMessages(chatTab);
@@ -319,7 +348,7 @@ export default function EventPage() {
     const raw = (msg.data ?? []) as any[];
 
     const ids = [...new Set(raw.map((m) => m.sender_id))];
-    const profilesMap = new Map<string, string>();
+    const profilesMap = new Map<string, string | null>();
 
     if (ids.length > 0) {
       const pr = await supabase.from("profiles").select("id, full_name").in("id", ids);
@@ -653,36 +682,6 @@ export default function EventPage() {
     setChatStatus("✅ Sent");
     await loadMessages(chatTab);
   }
-// POLLS
-const p = await supabase
-  .from("event_polls")
-  .select("id,event_id,question,mode,created_by,created_at")
-  .eq("event_id", eventId)
-  .order("created_at", { ascending: false });
-
-setPolls((p.data ?? []) as any);
-
-const pollIds = (p.data ?? []).map((x: any) => x.id);
-
-if (pollIds.length === 0) {
-  setPollOptions([]);
-  setPollVotes([]);
-} else {
-  const o = await supabase
-    .from("event_poll_options")
-    .select("id,poll_id,label")
-    .in("poll_id", pollIds)
-    .order("created_at", { ascending: true });
-
-  setPollOptions((o.data ?? []) as any);
-
-  const v = await supabase
-    .from("event_poll_votes")
-    .select("id,event_id,poll_id,option_id,user_id,created_at")
-    .eq("event_id", eventId);
-
-  setPollVotes((v.data ?? []) as any);
-}
 
   /* ================= UI ================= */
 
@@ -749,7 +748,6 @@ if (pollIds.length === 0) {
               ))
             )}
 
-            {/* Leave event */}
             {!isCreator && (
               <div style={{ marginTop: 8 }}>
                 <button onClick={leaveEvent} style={btnDanger}>
@@ -766,7 +764,6 @@ if (pollIds.length === 0) {
           <Card>
             <h2 style={{ marginTop: 0 }}>Invites</h2>
 
-            {/* Multi-invite */}
             <div style={{ marginTop: 10 }}>
               <div style={{ fontWeight: 900, marginBottom: 8 }}>Invite multiple friends</div>
 
@@ -807,7 +804,6 @@ if (pollIds.length === 0) {
 
             <hr style={hrStyle} />
 
-            {/* Single invite */}
             <div style={{ display: "grid", gap: 10 }}>
               <select
                 value=""
@@ -942,9 +938,7 @@ if (pollIds.length === 0) {
                               {it.claim_mode.toUpperCase()}
                             </span>
                             {canEdit ? (
-                              <span style={{ fontSize: 12, color: "rgba(229,231,235,0.7)" }}>
-                                (you can edit)
-                              </span>
+                              <span style={{ fontSize: 12, color: "rgba(229,231,235,0.7)" }}>(you can edit)</span>
                             ) : null}
                           </div>
 
@@ -967,18 +961,8 @@ if (pollIds.length === 0) {
 
                         {canEdit && (
                           <>
-                            <button
-                              onClick={() => startEdit(it)}
-                              style={btnGhostSmall}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => deleteItem(it.id)}
-                              style={btnDangerSmall}
-                            >
-                              Delete
-                            </button>
+                            <button onClick={() => startEdit(it)} style={btnGhostSmall}>Edit</button>
+                            <button onClick={() => deleteItem(it.id)} style={btnDangerSmall}>Delete</button>
                           </>
                         )}
                       </div>
@@ -990,23 +974,30 @@ if (pollIds.length === 0) {
           )}
         </Card>
 
+        {/* POLLS */}
+        {me && (
+          <PollsCard
+            eventId={eventId}
+            meId={me.id}
+            isCreator={isCreator}
+            polls={polls}
+            options={pollOptions}
+            votes={pollVotes}
+            onReload={loadAll}
+          />
+        )}
+
         {/* CHAT */}
         <Card>
           <h2 style={{ marginTop: 0 }}>Chat</h2>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button
-              onClick={() => switchTab("general")}
-              style={chatTab === "general" ? btnPrimary : btnGhost}
-            >
+            <button onClick={() => switchTab("general")} style={chatTab === "general" ? btnPrimary : btnGhost}>
               General
             </button>
 
             {isBirthday && (
-              <button
-                onClick={() => switchTab("secret")}
-                style={chatTab === "secret" ? btnPrimary : btnGhost}
-              >
+              <button onClick={() => switchTab("secret")} style={chatTab === "secret" ? btnPrimary : btnGhost}>
                 Secret (creator can’t read)
               </button>
             )}
@@ -1035,9 +1026,7 @@ if (pollIds.length === 0) {
               style={{ ...inputStyle, minHeight: 90 }}
             />
 
-            <button style={btnPrimary} onClick={sendMessage}>
-              Send
-            </button>
+            <button style={btnPrimary} onClick={sendMessage}>Send</button>
 
             {chatStatus && <div style={statusBoxStyle(chatStatus.startsWith("✅"))}>{chatStatus}</div>}
           </div>
@@ -1096,7 +1085,6 @@ const pageStyle: React.CSSProperties = {
 };
 
 const navLink: React.CSSProperties = { color: "#93c5fd", textDecoration: "none", marginRight: 10 };
-
 const linkStyle: React.CSSProperties = { color: "#93c5fd", textDecoration: "none", fontFamily: "system-ui" };
 
 const inputStyle: React.CSSProperties = {

@@ -22,6 +22,11 @@ export default function ProfilePage() {
   const [friendName, setFriendName] = useState("");
   const [friendEmail, setFriendEmail] = useState("");
 
+  // Change password
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [pwStatus, setPwStatus] = useState("");
+
   async function load() {
     setLoading(true);
     setStatus("");
@@ -108,6 +113,44 @@ export default function ProfilePage() {
     await load();
   }
 
+  async function changePassword() {
+    setPwStatus("");
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    const cp = currentPassword.trim();
+    const np = newPassword.trim();
+    if (np.length < 6) {
+      setPwStatus("❌ New password must be at least 6 characters");
+      return;
+    }
+
+    // Re-auth (password required)
+    setPwStatus("Re-authenticating…");
+    const { error: reauthErr } = await supabase.auth.signInWithPassword({
+      email,
+      password: cp,
+    });
+
+    if (reauthErr) {
+      setPwStatus(`❌ ${reauthErr.message}`);
+      return;
+    }
+
+    // Update password
+    setPwStatus("Updating password…");
+    const { error: updErr } = await supabase.auth.updateUser({ password: np });
+
+    if (updErr) {
+      setPwStatus(`❌ ${updErr.message}`);
+      return;
+    }
+
+    setCurrentPassword("");
+    setNewPassword("");
+    setPwStatus("✅ Password changed");
+  }
+
   async function signOut() {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
@@ -143,10 +186,38 @@ export default function ProfilePage() {
             </div>
           </div>
 
+          {/* Change password */}
           <div style={{ marginTop: 18 }}>
+            <h2 style={{ margin: 0 }}>Change password</h2>
+            <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+              <input
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="Current password"
+                type="password"
+                style={input}
+              />
+              <input
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="New password (min 6 chars)"
+                type="password"
+                style={input}
+              />
+              <button style={btnPrimary} onClick={changePassword}>
+                Update password
+              </button>
+              {pwStatus && <div style={statusBox(pwStatus.startsWith("✅"))}>{pwStatus}</div>}
+            </div>
+          </div>
+
+          <hr style={hr} />
+
+          {/* Friends */}
+          <div>
             <h2 style={{ margin: 0 }}>Friends</h2>
             <p style={{ marginTop: 6, color: "rgba(229,231,235,0.75)" }}>
-              Add friends here. In events you’ll get a dropdown to invite them quickly.
+              Add friends here. In events you’ll be able to invite multiple friends with checkboxes.
             </p>
 
             <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
@@ -183,7 +254,7 @@ export default function ProfilePage() {
                         {f.friend_name ? f.friend_name : f.friend_email}
                       </div>
                       <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
-                        {f.friend_email} • added {new Date(f.created_at).toLocaleString()}
+                        {f.friend_email}
                       </div>
                     </div>
 
@@ -201,7 +272,7 @@ export default function ProfilePage() {
   );
 }
 
-/* ================= UI ================= */
+/* UI */
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -228,8 +299,6 @@ function Card({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-
-/* ================= STYLES ================= */
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
@@ -286,6 +355,12 @@ const btnDanger: React.CSSProperties = {
   color: "#fecaca",
   fontWeight: 900,
   cursor: "pointer",
+};
+
+const hr: React.CSSProperties = {
+  border: "none",
+  borderTop: "1px solid rgba(255,255,255,0.12)",
+  margin: "18px 0",
 };
 
 function statusBox(ok: boolean): React.CSSProperties {

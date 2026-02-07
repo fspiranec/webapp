@@ -10,6 +10,7 @@ export default function EventPage() {
   const eventId = params.id;
 
   const [event, setEvent] = useState<any>(null);
+  const [err, setErr] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -17,8 +18,8 @@ export default function EventPage() {
     if (!supabase) return;
 
     (async () => {
-      const { data: userRes } = await supabase.auth.getUser();
-      if (!userRes.user) {
+      const { data: sessionRes } = await supabase.auth.getSession();
+      if (!sessionRes.session) {
         router.replace("/login");
         return;
       }
@@ -30,17 +31,27 @@ export default function EventPage() {
         .single();
 
       if (error) {
-        console.error(error);
+        setErr(`${error.message} (code: ${error.code ?? "n/a"})`);
         setEvent(null);
       } else {
         setEvent(data);
       }
+
       setLoading(false);
     })();
   }, [eventId, router]);
 
   if (loading) return <p style={{ padding: 24, fontFamily: "system-ui" }}>Loading...</p>;
-  if (!event) return <p style={{ padding: 24, fontFamily: "system-ui" }}>Event not found</p>;
+
+  if (!event) {
+    return (
+      <div style={{ padding: 24, fontFamily: "system-ui" }}>
+        <p><a href="/events">← Back</a></p>
+        <h2>Event not found</h2>
+        <p style={{ color: "crimson" }}>{err || "No error message returned."}</p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ maxWidth: 720, margin: "40px auto", fontFamily: "system-ui" }}>
@@ -50,9 +61,6 @@ export default function EventPage() {
       {event.starts_at && <p><b>When:</b> {new Date(event.starts_at).toLocaleString()}</p>}
       {event.location && <p><b>Where:</b> {event.location}</p>}
       {event.description && <p>{event.description}</p>}
-
-      <hr style={{ margin: "24px 0" }} />
-      <p>Next: invite people + items + claiming.</p>
     </div>
   );
 }

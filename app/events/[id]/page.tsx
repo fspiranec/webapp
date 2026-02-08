@@ -1004,7 +1004,7 @@ export default function EventPage() {
             polls={polls}
             options={pollOptions}
             votes={pollVotes}
-            onRefresh={loadAll}
+            onReload={loadAll}
           />
         )}
 

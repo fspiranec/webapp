@@ -172,12 +172,17 @@ export default function EventPage() {
     return friends.filter((f) => ids.includes(f.id));
   }, [selectedFriendIds, friends]);
 
-  function toggleFriend(id: string) {
-    setSelectedFriendIds((prev) => ({ ...prev, [id]: !prev[id] }));
-  }
-
   function clearSelected() {
     setSelectedFriendIds({});
+  }
+
+  function setSelectedFriendIdsFromSelect(selectedIds: string[]) {
+    setSelectedFriendIds(
+      selectedIds.reduce<Record<string, boolean>>((acc, id) => {
+        acc[id] = true;
+        return acc;
+      }, {})
+    );
   }
 
   /* ================= LOAD ALL ================= */
@@ -757,256 +762,275 @@ export default function EventPage() {
           {event.description && <p style={{ marginTop: 12, color: "rgba(229,231,235,0.85)" }}>{event.description}</p>}
         </Card>
 
-        {/* PEOPLE COMING */}
-        <Card>
-          <h2 style={{ marginTop: 0 }}>People coming</h2>
-          <div style={{ display: "grid", gap: 10 }}>
-            {members.length === 0 ? (
-              <div style={{ color: "rgba(229,231,235,0.75)" }}>No members found.</div>
-            ) : (
-              members.map((m) => (
-                <div key={m.user_id} style={rowStyle}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 900 }}>
-                      {displayNameByUser(m.user_id, m.full_name, m.email)}
-                      {m.user_id === event.creator_id ? " (creator)" : ""}
-                      {m.user_id === me?.id ? " (you)" : ""}
-                    </div>
-                    {m.email ? <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>{m.email}</div> : null}
-                  </div>
-                </div>
-              ))
-            )}
-
-            {!isCreator && (
-              <div style={{ marginTop: 8 }}>
-                <button onClick={leaveEvent} style={btnDanger}>Leave event</button>
-                {leaveStatus && <div style={statusBoxStyle(leaveStatus.startsWith("✅"))}>{leaveStatus}</div>}
-              </div>
-            )}
-          </div>
-        </Card>
-
-        {/* INVITES */}
-        {isCreator && (
-          <Card>
-            <h2 style={{ marginTop: 0 }}>Invites</h2>
-
-            <div style={{ marginTop: 10 }}>
-              <div style={{ fontWeight: 900, marginBottom: 8 }}>Invite multiple friends</div>
-
-              {friends.length === 0 ? (
-                <div style={{ color: "rgba(229,231,235,0.75)" }}>
-                  No friends yet. Add them in <a href="/profile" style={navLink}>/profile</a>.
-                </div>
-              ) : (
-                <div style={{ display: "grid", gap: 8 }}>
-                  {friends.map((f) => (
-                    <label key={f.id} style={friendRow}>
-                      <input
-                        type="checkbox"
-                        checked={!!selectedFriendIds[f.id]}
-                        onChange={() => toggleFriend(f.id)}
-                        style={{ width: 18, height: 18 }}
-                      />
-                      <div style={{ display: "flex", flexDirection: "column" }}>
-                        <b>{f.friend_name ? f.friend_name : f.friend_email}</b>
-                        <span style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>{f.friend_email}</span>
+        <div style={twoColumnLayout}>
+          <div style={columnStack}>
+            {/* PEOPLE COMING */}
+            <Card>
+              <h2 style={{ marginTop: 0 }}>People coming</h2>
+              <div style={{ display: "grid", gap: 10 }}>
+                {members.length === 0 ? (
+                  <div style={{ color: "rgba(229,231,235,0.75)" }}>No members found.</div>
+                ) : (
+                  members.map((m) => (
+                    <div key={m.user_id} style={rowStyle}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 900 }}>
+                          {displayNameByUser(m.user_id, m.full_name, m.email)}
+                          {m.user_id === event.creator_id ? " (creator)" : ""}
+                          {m.user_id === me?.id ? " (you)" : ""}
+                        </div>
+                        {m.email ? (
+                          <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>{m.email}</div>
+                        ) : null}
                       </div>
-                    </label>
-                  ))}
-                </div>
-              )}
+                    </div>
+                  ))
+                )}
 
-              <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
-                <button onClick={inviteSelectedFriends} style={btnPrimary}>
-                  Invite selected ({selectedFriends.length})
-                </button>
-                <button onClick={clearSelected} style={btnGhost}>Clear selection</button>
+                {!isCreator && (
+                  <div style={{ marginTop: 8 }}>
+                    <button onClick={leaveEvent} style={btnDanger}>Leave event</button>
+                    {leaveStatus && <div style={statusBoxStyle(leaveStatus.startsWith("✅"))}>{leaveStatus}</div>}
+                  </div>
+                )}
               </div>
+            </Card>
 
-              {bulkStatus && <div style={statusBoxStyle(bulkStatus.startsWith("✅"))}>{bulkStatus}</div>}
-            </div>
+            {/* INVITES */}
+            {isCreator && (
+              <Card>
+                <h2 style={{ marginTop: 0 }}>Invites</h2>
 
-            <hr style={hrStyle} />
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontWeight: 900, marginBottom: 8 }}>Invite multiple friends</div>
 
-            <div style={{ display: "grid", gap: 10 }}>
-              <select
-                value=""
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val) setInviteEmail(val);
-                }}
-                style={inputStyle}
-              >
-                <option value="">👇 Choose one friend (optional)</option>
-                {friends.map((f) => (
-                  <option key={f.id} value={f.friend_email}>
-                    {f.friend_name ? `${f.friend_name} — ${f.friend_email}` : f.friend_email}
-                  </option>
-                ))}
-              </select>
+                  {friends.length === 0 ? (
+                    <div style={{ color: "rgba(229,231,235,0.75)" }}>
+                      No friends yet. Add them in <a href="/profile" style={navLink}>/profile</a>.
+                    </div>
+                  ) : (
+                    <select
+                      multiple
+                      value={selectedFriends.map((f) => f.id)}
+                      onChange={(e) => {
+                        const ids = Array.from(e.target.selectedOptions)
+                          .map((opt) => opt.value)
+                          .filter(Boolean);
+                        setSelectedFriendIdsFromSelect(ids);
+                      }}
+                      style={{ ...inputStyle, minHeight: 140 }}
+                    >
+                      <option value="" disabled>👇 Choose one friend (optional)</option>
+                      {friends.map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.friend_name ? `${f.friend_name} — ${f.friend_email}` : f.friend_email}
+                        </option>
+                      ))}
+                    </select>
+                  )}
 
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                    <button onClick={inviteSelectedFriends} style={btnPrimary}>
+                      Invite selected ({selectedFriends.length})
+                    </button>
+                    <button onClick={clearSelected} style={btnGhost}>Clear selection</button>
+                  </div>
+
+                  {bulkStatus && <div style={statusBoxStyle(bulkStatus.startsWith("✅"))}>{bulkStatus}</div>}
+                </div>
+
+                <hr style={hrStyle} />
+
+                <div style={{ display: "grid", gap: 10 }}>
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val) setInviteEmail(val);
+                    }}
+                    style={inputStyle}
+                  >
+                    <option value="">👇 Choose one friend (optional)</option>
+                    {friends.map((f) => (
+                      <option key={f.id} value={f.friend_email}>
+                        {f.friend_name ? `${f.friend_name} — ${f.friend_email}` : f.friend_email}
+                      </option>
+                    ))}
+                  </select>
+
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <input
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                      placeholder="friend@email.com"
+                      style={inputStyle}
+                    />
+                    <button onClick={sendSingleInvite} style={btnPrimary}>Send invite</button>
+                  </div>
+
+                  {inviteStatus && <div style={statusBoxStyle(inviteStatus.startsWith("✅"))}>{inviteStatus}</div>}
+                </div>
+
+                <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
+                  {invites.length === 0 ? (
+                    <div style={{ color: "rgba(229,231,235,0.75)" }}>No invites yet.</div>
+                  ) : (
+                    <details style={detailsStyle} open>
+                      <summary style={summaryStyle}>
+                        Invited people ({invites.length})
+                      </summary>
+                      <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+                        {invites.map((inv) => (
+                          <div key={inv.id} style={rowStyle}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: 900 }}>{inv.email}</div>
+                              <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
+                                {inv.accepted ? "✅ Accepted" : "Pending"} • {new Date(inv.created_at).toLocaleString()}
+                              </div>
+                            </div>
+
+                            <button style={btnDangerSmall} onClick={() => uninvite(inv.id)}>Uninvite</button>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              </Card>
+            )}
+
+            {/* ITEMS */}
+            <Card>
+              <h2 style={{ marginTop: 0 }}>Items</h2>
+
+              <div style={{ display: "grid", gap: 10 }}>
                 <input
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="friend@email.com"
+                  placeholder="Item name (e.g. Beer, Burgers, Plates)"
+                  value={newItemTitle}
+                  onChange={(e) => setNewItemTitle(e.target.value)}
                   style={inputStyle}
                 />
-                <button onClick={sendSingleInvite} style={btnPrimary}>Send invite</button>
+                <input
+                  placeholder="Notes (optional)"
+                  value={newItemNotes}
+                  onChange={(e) => setNewItemNotes(e.target.value)}
+                  style={inputStyle}
+                />
+
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <select value={newItemMode} onChange={(e) => setNewItemMode(e.target.value as any)} style={inputStyle}>
+                    <option value="single">Single claim</option>
+                    <option value="multi">Multi claim</option>
+                  </select>
+
+                  <button onClick={addItem} disabled={!newItemTitle.trim()} style={primaryBtnStyle(!newItemTitle.trim())}>
+                    + Add item
+                  </button>
+                </div>
+
+                {status && <div style={statusBoxStyle(status.startsWith("✅"))}>{status}</div>}
               </div>
 
-              {inviteStatus && <div style={statusBoxStyle(inviteStatus.startsWith("✅"))}>{inviteStatus}</div>}
-            </div>
+              <hr style={hrStyle} />
 
-            <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
-              {invites.length === 0 ? (
-                <div style={{ color: "rgba(229,231,235,0.75)" }}>No invites yet.</div>
+              {items.length === 0 ? (
+                <p style={{ color: "rgba(229,231,235,0.75)" }}>No items yet. Add the first one above.</p>
               ) : (
-                invites.map((inv) => (
-                  <div key={inv.id} style={rowStyle}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 900 }}>{inv.email}</div>
-                      <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
-                        {inv.accepted ? "✅ Accepted" : "Pending"} • {new Date(inv.created_at).toLocaleString()}
+                <div style={{ display: "grid", gap: 10 }}>
+                  {items.map((it) => {
+                    const cs = claimsByItem.get(it.id) ?? [];
+                    const iClaimed = !!me && cs.some((c) => c.user_id === me.id);
+                    const canEdit = !!me && (it.created_by === me.id || isCreator);
+
+                    const claimText = hideClaims
+                      ? "🎁 Surprise mode: creator can’t see claims"
+                      : cs.length === 0
+                        ? "Not claimed yet"
+                        : it.claim_mode === "single"
+                          ? `Claimed by ${displayNameByUser(cs[0].user_id, cs[0].full_name, cs[0].email)}`
+                          : `Claimed by ${cs.map((c) => displayNameByUser(c.user_id, c.full_name, c.email)).join(", ")}`;
+
+                    const editing = editItemId === it.id;
+
+                    return (
+                      <div key={it.id} style={itemRowStyle}>
+                        <div style={{ flex: 1 }}>
+                          {editing ? (
+                            <div style={{ display: "grid", gap: 8 }}>
+                              <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={inputStyle} />
+                              <input value={editNotes} onChange={(e) => setEditNotes(e.target.value)} style={inputStyle} />
+                              <select value={editMode} onChange={(e) => setEditMode(e.target.value as any)} style={inputStyle}>
+                                <option value="single">Single claim</option>
+                                <option value="multi">Multi claim</option>
+                              </select>
+
+                              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                                <button style={btnPrimary} onClick={saveEdit}>Save</button>
+                                <button style={btnGhost} onClick={cancelEdit}>Cancel</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                                <b style={{ fontSize: 16 }}>{it.title}</b>
+                                <span style={pillStyle(it.claim_mode === "multi" ? "#34d399" : "#60a5fa")}>
+                                  {it.claim_mode.toUpperCase()}
+                                </span>
+                                {canEdit ? (
+                                  <span style={{ fontSize: 12, color: "rgba(229,231,235,0.7)" }}>(you can edit)</span>
+                                ) : null}
+                              </div>
+
+                              {it.notes && (
+                                <div style={{ marginTop: 6, color: "rgba(229,231,235,0.75)" }}>{it.notes}</div>
+                              )}
+
+                              <div style={{ marginTop: 8, color: "rgba(229,231,235,0.82)", fontSize: 13 }}>
+                                {claimText}
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        {!editing && (
+                          <div style={itemActionRow}>
+                            {!iClaimed ? (
+                              <button onClick={() => claim(it.id)} style={smallBtnStyle}>Claim</button>
+                            ) : (
+                              <button onClick={() => unclaim(it.id)} style={smallBtnDangerStyle}>Unclaim</button>
+                            )}
+
+                            {canEdit && (
+                              <>
+                                <button onClick={() => startEdit(it)} style={btnGhostSmall}>Edit</button>
+                                <button onClick={() => deleteItem(it.id)} style={btnDangerSmall}>Delete</button>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    </div>
-
-                    <button style={btnDangerSmall} onClick={() => uninvite(inv.id)}>Uninvite</button>
-                  </div>
-                ))
+                    );
+                  })}
+                </div>
               )}
-            </div>
-          </Card>
-        )}
-
-        {/* ITEMS */}
-        <Card>
-          <h2 style={{ marginTop: 0 }}>Items</h2>
-
-          <div style={{ display: "grid", gap: 10 }}>
-            <input
-              placeholder="Item name (e.g. Beer, Burgers, Plates)"
-              value={newItemTitle}
-              onChange={(e) => setNewItemTitle(e.target.value)}
-              style={inputStyle}
-            />
-            <input
-              placeholder="Notes (optional)"
-              value={newItemNotes}
-              onChange={(e) => setNewItemNotes(e.target.value)}
-              style={inputStyle}
-            />
-
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <select value={newItemMode} onChange={(e) => setNewItemMode(e.target.value as any)} style={inputStyle}>
-                <option value="single">Single claim</option>
-                <option value="multi">Multi claim</option>
-              </select>
-
-              <button onClick={addItem} disabled={!newItemTitle.trim()} style={primaryBtnStyle(!newItemTitle.trim())}>
-                + Add item
-              </button>
-            </div>
-
-            {status && <div style={statusBoxStyle(status.startsWith("✅"))}>{status}</div>}
+            </Card>
           </div>
 
-          <hr style={hrStyle} />
-
-          {items.length === 0 ? (
-            <p style={{ color: "rgba(229,231,235,0.75)" }}>No items yet. Add the first one above.</p>
-          ) : (
-            <div style={{ display: "grid", gap: 10 }}>
-              {items.map((it) => {
-                const cs = claimsByItem.get(it.id) ?? [];
-                const iClaimed = !!me && cs.some((c) => c.user_id === me.id);
-                const canEdit = !!me && (it.created_by === me.id || isCreator);
-
-                const claimText = hideClaims
-                  ? "🎁 Surprise mode: creator can’t see claims"
-                  : cs.length === 0
-                    ? "Not claimed yet"
-                    : it.claim_mode === "single"
-                      ? `Claimed by ${displayNameByUser(cs[0].user_id, cs[0].full_name, cs[0].email)}`
-                      : `Claimed by ${cs.map((c) => displayNameByUser(c.user_id, c.full_name, c.email)).join(", ")}`;
-
-                const editing = editItemId === it.id;
-
-                return (
-                  <div key={it.id} style={itemRowStyle}>
-                    <div style={{ flex: 1 }}>
-                      {editing ? (
-                        <div style={{ display: "grid", gap: 8 }}>
-                          <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={inputStyle} />
-                          <input value={editNotes} onChange={(e) => setEditNotes(e.target.value)} style={inputStyle} />
-                          <select value={editMode} onChange={(e) => setEditMode(e.target.value as any)} style={inputStyle}>
-                            <option value="single">Single claim</option>
-                            <option value="multi">Multi claim</option>
-                          </select>
-
-                          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                            <button style={btnPrimary} onClick={saveEdit}>Save</button>
-                            <button style={btnGhost} onClick={cancelEdit}>Cancel</button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                            <b style={{ fontSize: 16 }}>{it.title}</b>
-                            <span style={pillStyle(it.claim_mode === "multi" ? "#34d399" : "#60a5fa")}>
-                              {it.claim_mode.toUpperCase()}
-                            </span>
-                            {canEdit ? (
-                              <span style={{ fontSize: 12, color: "rgba(229,231,235,0.7)" }}>(you can edit)</span>
-                            ) : null}
-                          </div>
-
-                          {it.notes && <div style={{ marginTop: 6, color: "rgba(229,231,235,0.75)" }}>{it.notes}</div>}
-
-                          <div style={{ marginTop: 8, color: "rgba(229,231,235,0.82)", fontSize: 13 }}>
-                            {claimText}
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    {!editing && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
-                        {!iClaimed ? (
-                          <button onClick={() => claim(it.id)} style={smallBtnStyle}>Claim</button>
-                        ) : (
-                          <button onClick={() => unclaim(it.id)} style={smallBtnDangerStyle}>Unclaim</button>
-                        )}
-
-                        {canEdit && (
-                          <>
-                            <button onClick={() => startEdit(it)} style={btnGhostSmall}>Edit</button>
-                            <button onClick={() => deleteItem(it.id)} style={btnDangerSmall}>Delete</button>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </Card>
-
-        {/* POLLS */}
-        {me && (
-          <PollsCard
-            eventId={eventId}
-            meId={me.id}
-            isCreator={!!isCreator}
-            polls={polls}
-            options={pollOptions}
-            votes={pollVotes}
-            onReload={loadAll}
-          />
-        )}
+          {/* POLLS */}
+          <div style={columnStack}>
+            {me && (
+              <PollsCard
+                eventId={eventId}
+                meId={me.id}
+                isCreator={!!isCreator}
+                polls={polls}
+                options={pollOptions}
+                votes={pollVotes}
+                onReload={loadAll}
+              />
+            )}
+          </div>
+        </div>
 
         {/* CHAT */}
         <Card>
@@ -1130,6 +1154,14 @@ const itemRowStyle: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
 };
 
+const itemActionRow: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  alignItems: "center",
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
+};
+
 const rowStyle: React.CSSProperties = {
   display: "flex",
   gap: 12,
@@ -1140,14 +1172,30 @@ const rowStyle: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
 };
 
-const friendRow: React.CSSProperties = {
-  display: "flex",
-  gap: 12,
-  alignItems: "center",
-  padding: 12,
+const twoColumnLayout: React.CSSProperties = {
+  display: "grid",
+  gap: 16,
+  gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 0.8fr)",
+  alignItems: "start",
+};
+
+const columnStack: React.CSSProperties = {
+  display: "grid",
+  gap: 14,
+};
+
+const detailsStyle: React.CSSProperties = {
   borderRadius: 14,
-  background: "rgba(255,255,255,0.05)",
   border: "1px solid rgba(255,255,255,0.10)",
+  background: "rgba(255,255,255,0.05)",
+  padding: 10,
+};
+
+const summaryStyle: React.CSSProperties = {
+  cursor: "pointer",
+  fontWeight: 800,
+  color: "#e5e7eb",
+  listStyle: "none",
 };
 
 const chatBox: React.CSSProperties = {

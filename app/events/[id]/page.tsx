@@ -739,30 +739,65 @@ export default function EventPage() {
       <div style={{ maxWidth: 980, margin: "0 auto", color: "#e5e7eb", fontFamily: "system-ui" }}>
         <a href="/events" style={linkStyle}>← Back to events</a>
 
-        <Card>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-            <div>
-              <h1 style={{ margin: 0 }}>{event.title}</h1>
-              <div style={{ color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
-                <b>{event.type}</b> {event.surprise_mode ? "• 🎁 surprise mode" : ""}
+        <div style={topLayout}>
+          <Card>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div>
+                <h1 style={{ margin: 0, fontSize: 28 }}>{event.title}</h1>
+                <div style={{ marginTop: 6, color: "rgba(229,231,235,0.75)" }}>
+                  {event.type} {event.surprise_mode ? "• Surprise mode" : ""}
+                </div>
               </div>
-              {event.starts_at && <div style={{ marginTop: 6 }}>🗓 {new Date(event.starts_at).toLocaleString()}</div>}
-              {event.location && <div style={{ marginTop: 6 }}>📍 {event.location}</div>}
+
+              <button onClick={() => router.push(`/events/${event.id}/edit`)} style={btnGhost}>
+                Edit event
+              </button>
             </div>
 
-            <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
-              {me?.email ? <>Signed in as <b>{me.email}</b></> : null}
-              <div style={{ marginTop: 6 }}>
-                <a href="/profile" style={navLink}>Profile</a>{" "}
-                <a href="/invites" style={navLink}>Invites</a>
+            <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+              <div>
+                <div style={{ fontWeight: 700 }}>Starts</div>
+                <div style={{ color: "rgba(229,231,235,0.82)" }}>
+                  {event.starts_at ? new Date(event.starts_at).toLocaleString() : "Not set"}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 700 }}>Location</div>
+                <div style={{ color: "rgba(229,231,235,0.82)" }}>
+                  {event.location || "Not set"}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 700 }}>Description</div>
+                <div style={{ color: "rgba(229,231,235,0.82)" }}>
+                  {event.description || "No description"}
+                </div>
               </div>
             </div>
-          </div>
+          </Card>
 
-          {event.description && <p style={{ marginTop: 12, color: "rgba(229,231,235,0.85)" }}>{event.description}</p>}
-        </Card>
+          {isCreator && (
+            <Card>
+              <h2 style={{ marginTop: 0, color: "#fecaca" }}>Danger zone</h2>
+              <p style={{ color: "rgba(229,231,235,0.75)" }}>Delete event (requires your password).</p>
 
-        <div style={twoColumnLayout}>
+              <input
+                type="password"
+                value={deletePw}
+                onChange={(e) => setDeletePw(e.target.value)}
+                placeholder="Your password"
+                style={inputStyle}
+              />
+              <button onClick={deleteEventWithPassword} style={btnDanger}>Delete event permanently</button>
+
+              {deleteStatus && <div style={statusBoxStyle(deleteStatus.startsWith("✅"))}>{deleteStatus}</div>}
+            </Card>
+          )}
+        </div>
+
+        <div style={threeColumnLayout}>
           <div style={columnStack}>
             {/* PEOPLE COMING */}
             <Card>
@@ -771,20 +806,25 @@ export default function EventPage() {
                 {members.length === 0 ? (
                   <div style={{ color: "rgba(229,231,235,0.75)" }}>No members found.</div>
                 ) : (
-                  members.map((m) => (
-                    <div key={m.user_id} style={rowStyle}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 900 }}>
-                          {displayNameByUser(m.user_id, m.full_name, m.email)}
-                          {m.user_id === event.creator_id ? " (creator)" : ""}
-                          {m.user_id === me?.id ? " (you)" : ""}
+                  <details style={detailsStyle} open>
+                    <summary style={summaryStyle}>People list ({members.length})</summary>
+                    <div style={peopleListStyle}>
+                      {members.map((m) => (
+                        <div key={m.user_id} style={rowStyle}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 900 }}>
+                              {displayNameByUser(m.user_id, m.full_name, m.email)}
+                              {m.user_id === event.creator_id ? " (creator)" : ""}
+                              {m.user_id === me?.id ? " (you)" : ""}
+                            </div>
+                            {m.email ? (
+                              <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>{m.email}</div>
+                            ) : null}
+                          </div>
                         </div>
-                        {m.email ? (
-                          <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>{m.email}</div>
-                        ) : null}
-                      </div>
+                      ))}
                     </div>
-                  ))
+                  </details>
                 )}
 
                 {!isCreator && (
@@ -794,111 +834,97 @@ export default function EventPage() {
                   </div>
                 )}
               </div>
+
+              {/* INVITES */}
+              {isCreator && (
+                <div style={{ marginTop: 16 }}>
+                  <h3 style={{ margin: 0 }}>Invites</h3>
+
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ fontWeight: 900, marginBottom: 8 }}>Invite multiple friends</div>
+
+                    {friends.length === 0 ? (
+                      <div style={{ color: "rgba(229,231,235,0.75)" }}>
+                        No friends yet. Add them in <a href="/profile" style={navLink}>/profile</a>.
+                      </div>
+                    ) : (
+                      <select
+                        multiple
+                        value={selectedFriends.map((f) => f.id)}
+                        onChange={(e) => {
+                          const ids = Array.from(e.target.selectedOptions)
+                            .map((opt) => opt.value)
+                            .filter(Boolean);
+                          setSelectedFriendIdsFromSelect(ids);
+                        }}
+                        style={{ ...inputStyle, minHeight: 140 }}
+                      >
+                        {friends.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.friend_name ? `${f.friend_name} — ${f.friend_email}` : f.friend_email}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                      <button onClick={inviteSelectedFriends} style={btnPrimary}>
+                        Invite selected ({selectedFriends.length})
+                      </button>
+                      <button onClick={clearSelected} style={btnGhost}>Clear selection</button>
+                    </div>
+
+                    {bulkStatus && <div style={statusBoxStyle(bulkStatus.startsWith("✅"))}>{bulkStatus}</div>}
+                  </div>
+
+                  <hr style={hrStyle} />
+
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                      <input
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                        placeholder="friend@email.com"
+                        style={inputStyle}
+                      />
+                      <button onClick={sendSingleInvite} style={btnPrimary}>Send invite</button>
+                    </div>
+
+                    {inviteStatus && <div style={statusBoxStyle(inviteStatus.startsWith("✅"))}>{inviteStatus}</div>}
+                  </div>
+
+                  <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
+                    {invites.length === 0 ? (
+                      <div style={{ color: "rgba(229,231,235,0.75)" }}>No invites yet.</div>
+                    ) : (
+                      <details style={detailsStyle}>
+                        <summary style={summaryStyle}>
+                          Invited people ({invites.length})
+                        </summary>
+                        <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+                          {invites.map((inv) => (
+                            <div key={inv.id} style={rowStyle}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 900 }}>{inv.email}</div>
+                                <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
+                                  {inv.accepted ? "✅ Accepted" : "Pending"} • {new Date(inv.created_at).toLocaleString()}
+                                </div>
+                              </div>
+
+                              <button style={btnDangerSmall} onClick={() => uninvite(inv.id)}>Uninvite</button>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                  </div>
+                </div>
+              )}
             </Card>
 
-            {/* INVITES */}
-            {isCreator && (
-              <Card>
-                <h2 style={{ marginTop: 0 }}>Invites</h2>
+          </div>
 
-                <div style={{ marginTop: 10 }}>
-                  <div style={{ fontWeight: 900, marginBottom: 8 }}>Invite multiple friends</div>
-
-                  {friends.length === 0 ? (
-                    <div style={{ color: "rgba(229,231,235,0.75)" }}>
-                      No friends yet. Add them in <a href="/profile" style={navLink}>/profile</a>.
-                    </div>
-                  ) : (
-                    <select
-                      multiple
-                      value={selectedFriends.map((f) => f.id)}
-                      onChange={(e) => {
-                        const ids = Array.from(e.target.selectedOptions)
-                          .map((opt) => opt.value)
-                          .filter(Boolean);
-                        setSelectedFriendIdsFromSelect(ids);
-                      }}
-                      style={{ ...inputStyle, minHeight: 140 }}
-                    >
-                      <option value="" disabled>👇 Choose one friend (optional)</option>
-                      {friends.map((f) => (
-                        <option key={f.id} value={f.id}>
-                          {f.friend_name ? `${f.friend_name} — ${f.friend_email}` : f.friend_email}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-
-                  <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
-                    <button onClick={inviteSelectedFriends} style={btnPrimary}>
-                      Invite selected ({selectedFriends.length})
-                    </button>
-                    <button onClick={clearSelected} style={btnGhost}>Clear selection</button>
-                  </div>
-
-                  {bulkStatus && <div style={statusBoxStyle(bulkStatus.startsWith("✅"))}>{bulkStatus}</div>}
-                </div>
-
-                <hr style={hrStyle} />
-
-                <div style={{ display: "grid", gap: 10 }}>
-                  <select
-                    value=""
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val) setInviteEmail(val);
-                    }}
-                    style={inputStyle}
-                  >
-                    <option value="">👇 Choose one friend (optional)</option>
-                    {friends.map((f) => (
-                      <option key={f.id} value={f.friend_email}>
-                        {f.friend_name ? `${f.friend_name} — ${f.friend_email}` : f.friend_email}
-                      </option>
-                    ))}
-                  </select>
-
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <input
-                      value={inviteEmail}
-                      onChange={(e) => setInviteEmail(e.target.value)}
-                      placeholder="friend@email.com"
-                      style={inputStyle}
-                    />
-                    <button onClick={sendSingleInvite} style={btnPrimary}>Send invite</button>
-                  </div>
-
-                  {inviteStatus && <div style={statusBoxStyle(inviteStatus.startsWith("✅"))}>{inviteStatus}</div>}
-                </div>
-
-                <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
-                  {invites.length === 0 ? (
-                    <div style={{ color: "rgba(229,231,235,0.75)" }}>No invites yet.</div>
-                  ) : (
-                    <details style={detailsStyle} open>
-                      <summary style={summaryStyle}>
-                        Invited people ({invites.length})
-                      </summary>
-                      <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-                        {invites.map((inv) => (
-                          <div key={inv.id} style={rowStyle}>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontWeight: 900 }}>{inv.email}</div>
-                              <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
-                                {inv.accepted ? "✅ Accepted" : "Pending"} • {new Date(inv.created_at).toLocaleString()}
-                              </div>
-                            </div>
-
-                            <button style={btnDangerSmall} onClick={() => uninvite(inv.id)}>Uninvite</button>
-                          </div>
-                        ))}
-                      </div>
-                    </details>
-                  )}
-                </div>
-              </Card>
-            )}
-
+          <div style={columnStack}>
             {/* ITEMS */}
             <Card>
               <h2 style={{ marginTop: 0 }}>Items</h2>
@@ -1078,24 +1104,6 @@ export default function EventPage() {
           </div>
         </Card>
 
-        {/* DELETE EVENT */}
-        {isCreator && (
-          <Card>
-            <h2 style={{ marginTop: 0, color: "#fecaca" }}>Danger zone</h2>
-            <p style={{ color: "rgba(229,231,235,0.75)" }}>Delete event (requires your password).</p>
-
-            <input
-              type="password"
-              value={deletePw}
-              onChange={(e) => setDeletePw(e.target.value)}
-              placeholder="Your password"
-              style={inputStyle}
-            />
-            <button onClick={deleteEventWithPassword} style={btnDanger}>Delete event permanently</button>
-
-            {deleteStatus && <div style={statusBoxStyle(deleteStatus.startsWith("✅"))}>{deleteStatus}</div>}
-          </Card>
-        )}
       </div>
     </div>
   );
@@ -1172,10 +1180,17 @@ const rowStyle: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
 };
 
-const twoColumnLayout: React.CSSProperties = {
+const topLayout: React.CSSProperties = {
   display: "grid",
   gap: 16,
-  gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 0.8fr)",
+  gridTemplateColumns: "minmax(0, 1.8fr) minmax(0, 0.9fr)",
+  alignItems: "start",
+};
+
+const threeColumnLayout: React.CSSProperties = {
+  display: "grid",
+  gap: 16,
+  gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 0.85fr)",
   alignItems: "start",
 };
 
@@ -1189,6 +1204,15 @@ const detailsStyle: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
   background: "rgba(255,255,255,0.05)",
   padding: 10,
+};
+
+const peopleListStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+  marginTop: 12,
+  maxHeight: 320,
+  overflowY: "auto",
+  paddingRight: 2,
 };
 
 const summaryStyle: React.CSSProperties = {

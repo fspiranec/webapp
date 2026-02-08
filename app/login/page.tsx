@@ -1,221 +1,101 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 export default function LoginPage() {
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
+  const router = useRouter();
+  const supabase = getSupabaseBrowserClient();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
   const [status, setStatus] = useState("");
 
-  function fullNameFromInputs() {
-    const fn = firstName.trim();
-    const ln = lastName.trim();
-    const full = `${fn} ${ln}`.trim();
-    return { fn, ln, full };
-  }
+  async function login() {
+    setStatus("");
+    const cleanEmail = email.trim().toLowerCase();
+    const pw = password;
 
-  async function upsertProfile(fullName: string) {
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase) return;
+    if (!cleanEmail.includes("@")) return setStatus("❌ Enter a valid email");
+    if (!pw) return setStatus("❌ Enter your password");
+    if (!supabase) return setStatus("❌ Supabase not ready");
 
-    const { data: sess } = await supabase.auth.getSession();
-    const user = sess.session?.user;
-    if (!user) return;
+    setStatus("Signing in…");
+    const res = await supabase.auth.signInWithPassword({ email: cleanEmail, password: pw });
 
-    const { error } = await supabase.from("profiles").upsert({
-      id: user.id,
-      full_name: fullName,
-      avatar_url: null,
-    });
+    if (res.error) return setStatus(`❌ ${res.error.message}`);
 
-    if (error) throw new Error(error.message);
-  }
-
-  async function signUp() {
-    try {
-      setStatus("Signing up...");
-      const supabase = getSupabaseBrowserClient();
-      if (!supabase) return;
-
-      const { fn, ln, full } = fullNameFromInputs();
-      if (!fn || !ln) {
-        setStatus("❌ Please enter first and last name");
-        return;
-      }
-      if (full.length < 2) {
-        setStatus("❌ Name is too short");
-        return;
-      }
-
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim().toLowerCase(),
-        password,
-        options: {
-          data: {
-            full_name: full,          // ✅ stored in auth metadata
-            first_name: fn,
-            last_name: ln,
-          },
-        },
-      });
-
-      if (error) {
-        setStatus(`❌ ${error.message}`);
-        return;
-      }
-
-      // If confirmation OFF -> session exists right away
-      if (data.session) {
-        await upsertProfile(full);
-        window.location.href = "/events";
-        return;
-      }
-
-      setStatus("✅ Signed up! Confirm email, then sign in.");
-    } catch (e: any) {
-      setStatus(`❌ ${e?.message ?? "Unknown error"}`);
-    }
-  }
-
-  async function signIn() {
-    try {
-      setStatus("Signing in...");
-      const supabase = getSupabaseBrowserClient();
-      if (!supabase) return;
-
-      const { error } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password,
-      });
-
-      if (error) {
-        setStatus(`❌ ${error.message}`);
-        return;
-      }
-
-      // Ensure profile has a real name:
-      // 1) try metadata
-      const { data: sess } = await supabase.auth.getSession();
-      const user = sess.session?.user;
-      const metaName = (user?.user_metadata as any)?.full_name?.trim?.() || "";
-
-      // 2) if missing, force user to enter it now
-      if (!metaName) {
-        const { fn, ln, full } = fullNameFromInputs();
-        if (!fn || !ln) {
-          setStatus("❌ Enter first + last name (needed once to set your profile)");
-          return;
-        }
-        await upsertProfile(full);
-      } else {
-        await upsertProfile(metaName);
-      }
-
-      window.location.href = "/events";
-    } catch (e: any) {
-      setStatus(`❌ ${e?.message ?? "Unknown error"}`);
-    }
-  }
-
-  async function signOut() {
-    setStatus("Signing out...");
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase) return;
-
-    const { error } = await supabase.auth.signOut();
-    setStatus(error ? `❌ ${error.message}` : "✅ Signed out");
+    setStatus("✅ Signed in");
+    router.push("/events");
   }
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background:
-          "linear-gradient(180deg, #0b1020 0%, #0f172a 60%, #111827 100%)",
-        padding: 24,
-      }}
-    >
-      <div
-        style={{
-          maxWidth: 460,
-          margin: "38px auto",
-          fontFamily: "system-ui",
-          color: "#e5e7eb",
-        }}
-      >
-        <div
-          style={{
-            borderRadius: 18,
-            padding: 18,
-            background: "rgba(255,255,255,0.06)",
-            border: "1px solid rgba(255,255,255,0.10)",
-            boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
-          }}
-        >
-          <h1 style={{ margin: 0, fontSize: 28 }}>Welcome</h1>
-          <p style={{ marginTop: 8, color: "rgba(229,231,235,0.75)" }}>
-            Sign in, or create an account.
-          </p>
+    <div style={pageStyle}>
+      <div style={cardStyle}>
+        <h1 style={{ marginTop: 0 }}>Login</h1>
 
-          <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <input
-                placeholder="First name"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                style={inputStyle}
-              />
-              <input
-                placeholder="Last name"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                style={inputStyle}
-              />
-            </div>
+        <div style={hintStyle}>Existing users login here.</div>
 
-            <input
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={inputStyle}
-            />
+        <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+          <input
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Email"
+            style={inputStyle}
+            autoComplete="email"
+          />
+          <input
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            style={inputStyle}
+            type="password"
+            autoComplete="current-password"
+          />
 
-            <input
-              placeholder="Password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={inputStyle}
-            />
+          <button onClick={login} style={btnPrimary}>
+            Sign in
+          </button>
 
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button onClick={signIn} style={btnGhost}>Sign in</button>
-              <button onClick={signUp} style={btnPrimary}>Sign up</button>
-              <button onClick={signOut} style={btnDanger}>Sign out</button>
-            </div>
+          <button onClick={() => router.push("/register")} style={btnGhost}>
+            New user? Create account
+          </button>
 
-            {status && (
-              <div
-                style={{
-                  padding: 12,
-                  borderRadius: 12,
-                  background: "rgba(255,255,255,0.06)",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  color: status.startsWith("✅") ? "#86efac" : "#fca5a5",
-                }}
-              >
-                {status}
-              </div>
-            )}
-          </div>
+          {status ? <div style={statusBox(status.startsWith("✅"))}>{status}</div> : null}
         </div>
       </div>
     </div>
   );
 }
+
+/* ===== styles ===== */
+
+const pageStyle: React.CSSProperties = {
+  minHeight: "100vh",
+  display: "grid",
+  placeItems: "center",
+  padding: 24,
+  background: "linear-gradient(180deg, #0b1020 0%, #0f172a 60%, #111827 100%)",
+  color: "#e5e7eb",
+  fontFamily: "system-ui",
+};
+
+const cardStyle: React.CSSProperties = {
+  width: "100%",
+  maxWidth: 460,
+  borderRadius: 18,
+  padding: 18,
+  background: "rgba(255,255,255,0.06)",
+  border: "1px solid rgba(255,255,255,0.10)",
+  boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+};
+
+const hintStyle: React.CSSProperties = {
+  color: "rgba(229,231,235,0.75)",
+  fontSize: 13,
+};
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
@@ -247,12 +127,13 @@ const btnGhost: React.CSSProperties = {
   cursor: "pointer",
 };
 
-const btnDanger: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(248,113,113,0.15)",
-  color: "#fecaca",
-  fontWeight: 900,
-  cursor: "pointer",
-};
+function statusBox(ok: boolean): React.CSSProperties {
+  return {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.12)",
+    color: ok ? "#86efac" : "#fca5a5",
+  };
+}

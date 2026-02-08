@@ -739,30 +739,50 @@ export default function EventPage() {
       <div style={{ maxWidth: 980, margin: "0 auto", color: "#e5e7eb", fontFamily: "system-ui" }}>
         <a href="/events" style={linkStyle}>← Back to events</a>
 
-        <Card>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-            <div>
-              <h1 style={{ margin: 0 }}>{event.title}</h1>
-              <div style={{ color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
-                <b>{event.type}</b> {event.surprise_mode ? "• 🎁 surprise mode" : ""}
+        <div style={topLayout}>
+          <Card>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div>
+                <h1 style={{ margin: 0 }}>{event.title}</h1>
+                <div style={{ color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
+                  <b>{event.type}</b> {event.surprise_mode ? "• 🎁 surprise mode" : ""}
+                </div>
+                {event.starts_at && <div style={{ marginTop: 6 }}>🗓 {new Date(event.starts_at).toLocaleString()}</div>}
+                {event.location && <div style={{ marginTop: 6 }}>📍 {event.location}</div>}
               </div>
-              {event.starts_at && <div style={{ marginTop: 6 }}>🗓 {new Date(event.starts_at).toLocaleString()}</div>}
-              {event.location && <div style={{ marginTop: 6 }}>📍 {event.location}</div>}
+
+              <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
+                {me?.email ? <>Signed in as <b>{me.email}</b></> : null}
+                <div style={{ marginTop: 6 }}>
+                  <a href="/profile" style={navLink}>Profile</a>{" "}
+                  <a href="/invites" style={navLink}>Invites</a>
+                </div>
+              </div>
             </div>
 
-            <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
-              {me?.email ? <>Signed in as <b>{me.email}</b></> : null}
-              <div style={{ marginTop: 6 }}>
-                <a href="/profile" style={navLink}>Profile</a>{" "}
-                <a href="/invites" style={navLink}>Invites</a>
-              </div>
-            </div>
-          </div>
+            {event.description && <p style={{ marginTop: 12, color: "rgba(229,231,235,0.85)" }}>{event.description}</p>}
+          </Card>
 
-          {event.description && <p style={{ marginTop: 12, color: "rgba(229,231,235,0.85)" }}>{event.description}</p>}
-        </Card>
+          {isCreator && (
+            <Card>
+              <h2 style={{ marginTop: 0, color: "#fecaca" }}>Danger zone</h2>
+              <p style={{ color: "rgba(229,231,235,0.75)" }}>Delete event (requires your password).</p>
 
-        <div style={twoColumnLayout}>
+              <input
+                type="password"
+                value={deletePw}
+                onChange={(e) => setDeletePw(e.target.value)}
+                placeholder="Your password"
+                style={inputStyle}
+              />
+              <button onClick={deleteEventWithPassword} style={btnDanger}>Delete event permanently</button>
+
+              {deleteStatus && <div style={statusBoxStyle(deleteStatus.startsWith("✅"))}>{deleteStatus}</div>}
+            </Card>
+          )}
+        </div>
+
+        <div style={threeColumnLayout}>
           <div style={columnStack}>
             {/* PEOPLE COMING */}
             <Card>
@@ -887,6 +907,9 @@ export default function EventPage() {
               )}
             </Card>
 
+          </div>
+
+          <div style={columnStack}>
             {/* ITEMS */}
             <Card>
               <h2 style={{ marginTop: 0 }}>Items</h2>
@@ -1066,24 +1089,6 @@ export default function EventPage() {
           </div>
         </Card>
 
-        {/* DELETE EVENT */}
-        {isCreator && (
-          <Card>
-            <h2 style={{ marginTop: 0, color: "#fecaca" }}>Danger zone</h2>
-            <p style={{ color: "rgba(229,231,235,0.75)" }}>Delete event (requires your password).</p>
-
-            <input
-              type="password"
-              value={deletePw}
-              onChange={(e) => setDeletePw(e.target.value)}
-              placeholder="Your password"
-              style={inputStyle}
-            />
-            <button onClick={deleteEventWithPassword} style={btnDanger}>Delete event permanently</button>
-
-            {deleteStatus && <div style={statusBoxStyle(deleteStatus.startsWith("✅"))}>{deleteStatus}</div>}
-          </Card>
-        )}
       </div>
     </div>
   );
@@ -1160,10 +1165,17 @@ const rowStyle: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
 };
 
-const twoColumnLayout: React.CSSProperties = {
+const topLayout: React.CSSProperties = {
   display: "grid",
   gap: 16,
-  gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 0.8fr)",
+  gridTemplateColumns: "minmax(0, 1.8fr) minmax(0, 0.9fr)",
+  alignItems: "start",
+};
+
+const threeColumnLayout: React.CSSProperties = {
+  display: "grid",
+  gap: 16,
+  gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 0.85fr)",
   alignItems: "start",
 };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 export default function LoginPage() {
@@ -10,9 +10,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState("");
 
-  function goNext() {
-    const next = new URLSearchParams(window.location.search).get("next");
-    window.location.href = next ? next : "/events";
+  function fullNameFromInputs() {
+    const fn = firstName.trim();
+    const ln = lastName.trim();
+    const full = `${fn} ${ln}`.trim();
+    return { fn, ln, full };
   }
 
   async function upsertProfile(fullName: string) {
@@ -23,105 +25,98 @@ export default function LoginPage() {
     const user = sess.session?.user;
     if (!user) return;
 
-    const name = fullName.trim();
-    if (!name) throw new Error("Name is required");
-
     const { error } = await supabase.from("profiles").upsert({
       id: user.id,
-      full_name: name,
+      full_name: fullName,
       avatar_url: null,
     });
 
-    if (error) throw error;
+    if (error) throw new Error(error.message);
   }
 
   async function signUp() {
-    setStatus("Signing up...");
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase) return;
-
-    const fn = firstName.trim();
-    const ln = lastName.trim();
-    if (!fn || !ln) {
-      setStatus("❌ Please enter first and last name");
-      return;
-    }
-
-    const fullName = `${fn} ${ln}`.trim();
-
-    const { data, error } = await supabase.auth.signUp({
-      email: email.trim(),
-      password,
-      options: {
-        data: { full_name: fullName }, // keep also in auth metadata
-      },
-    });
-
-    if (error) {
-      setStatus(`❌ ${error.message}`);
-      return;
-    }
-
-    // If email confirmation is OFF, session exists immediately
-    if (data.session) {
-      try {
-        await upsertProfile(fullName);
-        setStatus("✅ Signed up");
-        goNext();
-      } catch (e: any) {
-        setStatus(`❌ Profile save failed: ${e?.message || "unknown"}`);
-      }
-      return;
-    }
-
-    // Confirmation ON:
-    setStatus("✅ Signed up! Confirm email, then sign in.");
-  }
-
-  async function signIn() {
-    setStatus("Signing in...");
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase) return;
-
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-
-    if (error) {
-      setStatus(`❌ ${error.message}`);
-      return;
-    }
-
-    // Ensure profile exists on first login.
-    // If user typed name, use it. Otherwise, try metadata.
     try {
-      const { data: sess } = await supabase.auth.getSession();
-      const user = sess.session?.user;
+      setStatus("Signing up...");
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase) return;
 
-      const fn = firstName.trim();
-      const ln = lastName.trim();
-      const typedName = `${fn} ${ln}`.trim();
-
-      const metaName =
-        (user?.user_metadata as any)?.full_name ||
-        (user?.user_metadata as any)?.name ||
-        "";
-
-      const fullNameToUse = typedName || String(metaName || "").trim();
-
-      if (!fullNameToUse) {
-        // Don’t allow empty profiles anymore
-        setStatus("❌ Missing name. Enter first + last name, then sign in again.");
+      const { fn, ln, full } = fullNameFromInputs();
+      if (!fn || !ln) {
+        setStatus("❌ Please enter first and last name");
+        return;
+      }
+      if (full.length < 2) {
+        setStatus("❌ Name is too short");
         return;
       }
 
-      await upsertProfile(fullNameToUse);
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim().toLowerCase(),
+        password,
+        options: {
+          data: {
+            full_name: full,          // ✅ stored in auth metadata
+            first_name: fn,
+            last_name: ln,
+          },
+        },
+      });
 
-      setStatus("✅ Signed in");
-      goNext();
+      if (error) {
+        setStatus(`❌ ${error.message}`);
+        return;
+      }
+
+      // If confirmation OFF -> session exists right away
+      if (data.session) {
+        await upsertProfile(full);
+        window.location.href = "/events";
+        return;
+      }
+
+      setStatus("✅ Signed up! Confirm email, then sign in.");
     } catch (e: any) {
-      setStatus(`❌ Profile save failed: ${e?.message || "unknown"}`);
+      setStatus(`❌ ${e?.message ?? "Unknown error"}`);
+    }
+  }
+
+  async function signIn() {
+    try {
+      setStatus("Signing in...");
+      const supabase = getSupabaseBrowserClient();
+      if (!supabase) return;
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      });
+
+      if (error) {
+        setStatus(`❌ ${error.message}`);
+        return;
+      }
+
+      // Ensure profile has a real name:
+      // 1) try metadata
+      const { data: sess } = await supabase.auth.getSession();
+      const user = sess.session?.user;
+      const metaName = (user?.user_metadata as any)?.full_name?.trim?.() || "";
+
+      // 2) if missing, force user to enter it now
+      if (!metaName) {
+        const { fn, ln, full } = fullNameFromInputs();
+        if (!fn || !ln) {
+          setStatus("❌ Enter first + last name (needed once to set your profile)");
+          return;
+        }
+        await upsertProfile(full);
+      } else {
+        await upsertProfile(metaName);
+      }
+
+      window.location.href = "/events";
+    } catch (e: any) {
+      setStatus(`❌ ${e?.message ?? "Unknown error"}`);
     }
   }
 
@@ -138,11 +133,19 @@ export default function LoginPage() {
     <div
       style={{
         minHeight: "100vh",
-        background: "linear-gradient(180deg, #0b1020 0%, #0f172a 60%, #111827 100%)",
+        background:
+          "linear-gradient(180deg, #0b1020 0%, #0f172a 60%, #111827 100%)",
         padding: 24,
       }}
     >
-      <div style={{ maxWidth: 460, margin: "38px auto", fontFamily: "system-ui", color: "#e5e7eb" }}>
+      <div
+        style={{
+          maxWidth: 460,
+          margin: "38px auto",
+          fontFamily: "system-ui",
+          color: "#e5e7eb",
+        }}
+      >
         <div
           style={{
             borderRadius: 18,
@@ -173,7 +176,12 @@ export default function LoginPage() {
               />
             </div>
 
-            <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
+            <input
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={inputStyle}
+            />
 
             <input
               placeholder="Password"

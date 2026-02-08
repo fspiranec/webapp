@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 export default function LoginPage() {
@@ -10,31 +10,12 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState("");
 
-  async function ensureProfileRow() {
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase) return null;
-
-    const { data: sess } = await supabase.auth.getSession();
-    const user = sess.session?.user;
-    if (!user) return null;
-
-    // Create profile row if missing (but DO NOT overwrite name)
-    await supabase.from("profiles").upsert({
-      id: user.id,
-      avatar_url: null,
-    });
-
-    // Read current profile
-    const { data: prof } = await supabase
-      .from("profiles")
-      .select("full_name")
-      .eq("id", user.id)
-      .single();
-
-    return prof?.full_name ?? null;
+  function goNext() {
+    const next = new URLSearchParams(window.location.search).get("next");
+    window.location.href = next ? next : "/events";
   }
 
-  async function setProfileName(fullName: string) {
+  async function upsertProfile(fullName: string) {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
 
@@ -42,11 +23,16 @@ export default function LoginPage() {
     const user = sess.session?.user;
     if (!user) return;
 
-    await supabase.from("profiles").upsert({
+    const name = fullName.trim();
+    if (!name) throw new Error("Name is required");
+
+    const { error } = await supabase.from("profiles").upsert({
       id: user.id,
-      full_name: fullName,
+      full_name: name,
       avatar_url: null,
     });
+
+    if (error) throw error;
   }
 
   async function signUp() {
@@ -61,9 +47,14 @@ export default function LoginPage() {
       return;
     }
 
+    const fullName = `${fn} ${ln}`.trim();
+
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: email.trim(),
       password,
+      options: {
+        data: { full_name: fullName }, // keep also in auth metadata
+      },
     });
 
     if (error) {
@@ -71,13 +62,19 @@ export default function LoginPage() {
       return;
     }
 
-    // If email confirmation is OFF -> immediate session exists
+    // If email confirmation is OFF, session exists immediately
     if (data.session) {
-      await setProfileName(`${fn} ${ln}`);
-      window.location.href = "/events";
+      try {
+        await upsertProfile(fullName);
+        setStatus("✅ Signed up");
+        goNext();
+      } catch (e: any) {
+        setStatus(`❌ Profile save failed: ${e?.message || "unknown"}`);
+      }
       return;
     }
 
+    // Confirmation ON:
     setStatus("✅ Signed up! Confirm email, then sign in.");
   }
 
@@ -86,21 +83,46 @@ export default function LoginPage() {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+
     if (error) {
       setStatus(`❌ ${error.message}`);
       return;
     }
 
-    const fullName = await ensureProfileRow();
+    // Ensure profile exists on first login.
+    // If user typed name, use it. Otherwise, try metadata.
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const user = sess.session?.user;
 
-    // If name missing → force user to set it
-    if (!fullName) {
-      window.location.href = "/profile";
-      return;
+      const fn = firstName.trim();
+      const ln = lastName.trim();
+      const typedName = `${fn} ${ln}`.trim();
+
+      const metaName =
+        (user?.user_metadata as any)?.full_name ||
+        (user?.user_metadata as any)?.name ||
+        "";
+
+      const fullNameToUse = typedName || String(metaName || "").trim();
+
+      if (!fullNameToUse) {
+        // Don’t allow empty profiles anymore
+        setStatus("❌ Missing name. Enter first + last name, then sign in again.");
+        return;
+      }
+
+      await upsertProfile(fullNameToUse);
+
+      setStatus("✅ Signed in");
+      goNext();
+    } catch (e: any) {
+      setStatus(`❌ Profile save failed: ${e?.message || "unknown"}`);
     }
-
-    window.location.href = "/events";
   }
 
   async function signOut() {
@@ -138,25 +160,20 @@ export default function LoginPage() {
           <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <input
-                placeholder="First name (signup)"
+                placeholder="First name"
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
                 style={inputStyle}
               />
               <input
-                placeholder="Last name (signup)"
+                placeholder="Last name"
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
                 style={inputStyle}
               />
             </div>
 
-            <input
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={inputStyle}
-            />
+            <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
 
             <input
               placeholder="Password"
@@ -173,13 +190,15 @@ export default function LoginPage() {
             </div>
 
             {status && (
-              <div style={{
-                padding: 12,
-                borderRadius: 12,
-                background: "rgba(255,255,255,0.06)",
-                border: "1px solid rgba(255,255,255,0.12)",
-                color: status.startsWith("✅") ? "#86efac" : "#fca5a5",
-              }}>
+              <div
+                style={{
+                  padding: 12,
+                  borderRadius: 12,
+                  background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  color: status.startsWith("✅") ? "#86efac" : "#fca5a5",
+                }}
+              >
                 {status}
               </div>
             )}

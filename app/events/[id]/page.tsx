@@ -743,39 +743,31 @@ export default function EventPage() {
           <Card>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <div>
-                <h1 style={{ margin: 0, fontSize: 28 }}>{event.title}</h1>
-                <div style={{ marginTop: 6, color: "rgba(229,231,235,0.75)" }}>
-                  {event.type} {event.surprise_mode ? "• Surprise mode" : ""}
+                <h1 style={{ margin: 0 }}>{event.title}</h1>
+                <div style={{ color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
+                  <b>{event.type}</b> {event.surprise_mode ? "• 🎁 surprise mode" : ""}
                 </div>
+                {event.starts_at && <div style={{ marginTop: 6 }}>🗓 {new Date(event.starts_at).toLocaleString()}</div>}
+                {event.location && <div style={{ marginTop: 6 }}>📍 {event.location}</div>}
               </div>
 
-              <button onClick={() => router.push(`/events/${event.id}/edit`)} style={btnGhost}>
-                Edit event
-              </button>
-            </div>
-
-            <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-              <div>
-                <div style={{ fontWeight: 700 }}>Starts</div>
-                <div style={{ color: "rgba(229,231,235,0.82)" }}>
-                  {event.starts_at ? new Date(event.starts_at).toLocaleString() : "Not set"}
+              <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
+                {me?.email ? <>Signed in as <b>{me.email}</b></> : null}
+                <div style={{ marginTop: 6 }}>
+                  <a href="/profile" style={navLink}>Profile</a>{" "}
+                  <a href="/invites" style={navLink}>Invites</a>
                 </div>
-              </div>
-
-              <div>
-                <div style={{ fontWeight: 700 }}>Location</div>
-                <div style={{ color: "rgba(229,231,235,0.82)" }}>
-                  {event.location || "Not set"}
-                </div>
-              </div>
-
-              <div>
-                <div style={{ fontWeight: 700 }}>Description</div>
-                <div style={{ color: "rgba(229,231,235,0.82)" }}>
-                  {event.description || "No description"}
-                </div>
+                {isCreator && (
+                  <div style={{ marginTop: 10 }}>
+                    <button onClick={() => router.push(`/events/${event.id}/edit`)} style={btnGhost}>
+                      Edit event
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
+
+            {event.description && <p style={{ marginTop: 12, color: "rgba(229,231,235,0.85)" }}>{event.description}</p>}
           </Card>
 
           {isCreator && (

@@ -1,172 +1,125 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
 
-/** Replace these with your real types */
-type Friend = { id: string; name: string; email?: string };
-type Invite = { id: string; name: string; status: "invited" | "accepted" | "declined" | "maybe" };
-type Item = { id: string; title: string; claimedBy?: string | null };
+type EventRow = {
+  id: string;
+  title: string;
+  type: string;
+  starts_at: string | null;
+  location: string | null;
+  surprise_mode: boolean;
+};
 
-export default function EventDetailsLayoutExample() {
-  // ---- mock state; replace with your fetched data ----
-  const friends: Friend[] = [
-    { id: "1", name: "Ana" },
-    { id: "2", name: "Marko" },
-    { id: "3", name: "Ivana" },
-  ];
+export default function EventsPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [events, setEvents] = useState<EventRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
 
-  const [selectedFriendId, setSelectedFriendId] = useState<string>(""); // optional
-  const invites: Invite[] = [
-    { id: "i1", name: "Ana", status: "accepted" },
-    { id: "i2", name: "Marko", status: "invited" },
-    { id: "i3", name: "Ivana", status: "maybe" },
-  ];
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
 
-  const peopleComing = useMemo(
-    () => invites.filter((i) => i.status === "accepted"),
-    [invites]
-  );
+    (async () => {
+      const { data: sess } = await supabase.auth.getSession();
+      if (!sess.session) {
+        router.replace("/login");
+        return;
+      }
+      const user = sess.session.user;
+      setEmail(user.email ?? "");
 
-  const items: Item[] = [
-    { id: "it1", title: "Chips", claimedBy: "Ana" },
-    { id: "it2", title: "Drinks", claimedBy: null },
-  ];
+      const { data, error } = await supabase
+        .from("event_members")
+        .select("event_id, events(id,title,type,starts_at,location,surprise_mode)")
+        .eq("user_id", user.id);
 
-  // ---- handlers (wire to your real actions) ----
-  function onInviteSelected(friendId: string) {
-    setSelectedFriendId(friendId);
-    // call your invite mutation here if you want immediate invite
-    // or show "Invite" button next to dropdown
+      if (error) {
+        setErr(error.message);
+        setEvents([]);
+      } else {
+        const list = (data ?? []).map((x: any) => x.events).filter(Boolean);
+        setEvents(list);
+      }
+
+      setLoading(false);
+    })();
+  }, [router]);
+
+  async function signOut() {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+    await supabase.auth.signOut();
+    router.replace("/login");
   }
 
-  function claimItem(id: string) {
-    // your claim mutation
-    console.log("claim", id);
-  }
-  function unclaimItem(id: string) {
-    // your unclaim mutation
-    console.log("unclaim", id);
-  }
-  function editItem(id: string) {
-    console.log("edit", id);
-  }
-  function deleteItem(id: string) {
-    console.log("delete", id);
+  if (loading) {
+    return (
+      <div style={page}>
+        <Shell>
+          <Card>
+            <div style={{ color: "rgba(229,231,235,0.8)" }}>Loading…</div>
+          </Card>
+        </Shell>
+      </div>
+    );
   }
 
   return (
     <div style={page}>
       <Shell>
         <Card>
-          {/* ======= TOP GRID: Left (People/Invites/Items) + Right (Polls) ======= */}
-          <div style={topGrid}>
-            {/* LEFT COLUMN */}
-            <div style={{ display: "grid", gap: 12, minWidth: 0 }}>
-              {/* People coming (left) */}
-              <Panel title="People coming">
-                {peopleComing.length === 0 ? (
-                  <div style={muted}>No one confirmed yet.</div>
-                ) : (
-                  <div style={chipWrap}>
-                    {peopleComing.map((p) => (
-                      <span key={p.id} style={chip}>
-                        {p.name}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </Panel>
-
-              {/* Invite dropdown: "Choose one friend (optional)" */}
-              <Panel title="Invite a friend">
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                  <select
-                    value={selectedFriendId}
-                    onChange={(e) => onInviteSelected(e.target.value)}
-                    style={select}
-                  >
-                    <option value="">Choose one friend (optional)</option>
-                    {friends.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.name}
-                      </option>
-                    ))}
-                  </select>
-
-                  {/* Optional: keep a button if you don’t want auto-invite on select */}
-                  <button style={btnPrimary} onClick={() => console.log("invite", selectedFriendId)} disabled={!selectedFriendId}>
-                    Invite
-                  </button>
-                </div>
-              </Panel>
-
-              {/* Invited list + status as dropdown */}
-              <Dropdown title="Invited people & status" subtitle={`${invites.length} total`}>
-                <div style={{ display: "grid", gap: 8 }}>
-                  {invites.map((i) => (
-                    <div key={i.id} style={rowBetween}>
-                      <div style={{ fontWeight: 800 }}>{i.name}</div>
-                      <span style={statusPill(i.status)}>{i.status}</span>
-                    </div>
-                  ))}
-                </div>
-              </Dropdown>
-
-              {/* Items with actions inline (claimed / unclaimed / edit / delete) */}
-              <Panel title="Items">
-                <div style={{ display: "grid", gap: 10 }}>
-                  {items.map((it) => {
-                    const isClaimed = !!it.claimedBy;
-                    return (
-                      <div key={it.id} style={itemRow}>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontWeight: 900 }}>{it.title}</div>
-                          <div style={muted}>
-                            {isClaimed ? `Claimed by ${it.claimedBy}` : "Unclaimed"}
-                          </div>
-                        </div>
-
-                        {/* ACTIONS: one beside another */}
-                        <div style={actionsRow}>
-                          {!isClaimed ? (
-                            <button style={btnSmallPrimary} onClick={() => claimItem(it.id)}>
-                              Claim
-                            </button>
-                          ) : (
-                            <button style={btnSmallGhost} onClick={() => unclaimItem(it.id)}>
-                              Unclaim
-                            </button>
-                          )}
-
-                          <button style={btnSmallGhost} onClick={() => editItem(it.id)}>
-                            Edit
-                          </button>
-                          <button style={btnSmallDanger} onClick={() => deleteItem(it.id)}>
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </Panel>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <h1 style={{ margin: 0, fontSize: 34 }}>Your events</h1>
+              <div style={{ color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
+                Logged in as <b style={{ color: "#e5e7eb" }}>{email}</b>
+              </div>
             </div>
 
-            {/* RIGHT COLUMN: Polls */}
-            <div style={{ display: "grid", gap: 12, minWidth: 0 }}>
-              <Panel title="Polls">
-                <div style={muted}>
-                  Put your polls UI here. This panel stays on the right on desktop, stacks on mobile.
-                </div>
-              </Panel>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <button style={btnPrimary} onClick={() => router.push("/events/new")}>
+                + New event
+              </button>
+
+              <button style={btnGhost} onClick={() => router.push("/invites")}>
+                Invites
+              </button>
+
+              <button style={btnGhost} onClick={() => router.push("/profile")}>
+                Profile
+              </button>
+
+              <button style={btnGhost} onClick={signOut}>
+                Sign out
+              </button>
             </div>
           </div>
 
-          {/* ======= CHAT UNDER (full width) ======= */}
-          <div style={{ marginTop: 14 }}>
-            <Panel title="Chat">
-              <div style={muted}>Chat goes here (full width, under both columns).</div>
-            </Panel>
+          {err && <div style={statusBox(false)}>❌ {err}</div>}
+
+          <div style={{ marginTop: 16, display: "grid", gap: 12 }}>
+            {events.length === 0 ? (
+              <div style={{ color: "rgba(229,231,235,0.75)" }}>
+                No events yet. Create one!
+              </div>
+            ) : (
+              events.map((e) => (
+                <a key={e.id} href={`/events/${e.id}`} style={eventRow}>
+                  <div style={{ fontWeight: 900, fontSize: 18 }}>{e.title}</div>
+                  <div style={{ color: "rgba(229,231,235,0.75)", fontSize: 13, marginTop: 4 }}>
+                    {e.type}
+                    {e.surprise_mode ? " • 🎁 surprise" : ""}
+                    {e.starts_at ? ` • ${new Date(e.starts_at).toLocaleString()}` : ""}
+                    {e.location ? ` • ${e.location}` : ""}
+                  </div>
+                </a>
+              ))
+            )}
           </div>
         </Card>
       </Shell>
@@ -174,10 +127,14 @@ export default function EventDetailsLayoutExample() {
   );
 }
 
-/* ================= small UI components (same style language) ================= */
+/* ================= UI HELPERS ================= */
 
 function Shell({ children }: { children: React.ReactNode }) {
-  return <div style={{ maxWidth: 980, margin: "0 auto", paddingTop: 40, fontFamily: "system-ui" }}>{children}</div>;
+  return (
+    <div style={{ maxWidth: 980, margin: "0 auto", paddingTop: 40, fontFamily: "system-ui" }}>
+      {children}
+    </div>
+  );
 }
 
 function Card({ children }: { children: React.ReactNode }) {
@@ -198,129 +155,13 @@ function Card({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div style={panel}>
-      <div style={{ fontWeight: 900, marginBottom: 10 }}>{title}</div>
-      {children}
-    </div>
-  );
-}
-
-/** Drop-down without extra libs, keeps your look */
-function Dropdown({
-  title,
-  subtitle,
-  children,
-}: {
-  title: string;
-  subtitle?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <details style={panel}>
-      <summary style={summaryRow}>
-        <div>
-          <div style={{ fontWeight: 900 }}>{title}</div>
-          {subtitle ? <div style={{ marginTop: 3, ...muted }}>{subtitle}</div> : null}
-        </div>
-        <span style={{ ...muted, fontWeight: 900 }}>▼</span>
-      </summary>
-      <div style={{ marginTop: 10 }}>{children}</div>
-    </details>
-  );
-}
-
-/* ================= styles (keep your palette) ================= */
+/* ================= STYLES ================= */
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
   background:
     "radial-gradient(900px 500px at 50% 0%, rgba(124,58,237,0.45), transparent 60%), linear-gradient(180deg, #0b1020 0%, #0f172a 60%, #111827 100%)",
   padding: 24,
-};
-
-const topGrid: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1.25fr 0.75fr",
-  gap: 12,
-};
-
-/** mobile stacking without changing theme (simple) */
-const media = typeof window !== "undefined" ? window.matchMedia("(max-width: 860px)") : null;
-if (media?.matches) topGrid.gridTemplateColumns = "1fr";
-
-const panel: React.CSSProperties = {
-  padding: 14,
-  borderRadius: 16,
-  background: "rgba(255,255,255,0.05)",
-  border: "1px solid rgba(255,255,255,0.10)",
-  minWidth: 0,
-};
-
-const summaryRow: React.CSSProperties = {
-  listStyle: "none",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 12,
-  cursor: "pointer",
-};
-
-const muted: React.CSSProperties = {
-  color: "rgba(229,231,235,0.75)",
-  fontSize: 13,
-};
-
-const chipWrap: React.CSSProperties = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: 8,
-};
-
-const chip: React.CSSProperties = {
-  padding: "6px 10px",
-  borderRadius: 999,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(255,255,255,0.06)",
-  fontWeight: 900,
-  fontSize: 13,
-};
-
-const rowBetween: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 10,
-};
-
-const itemRow: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 12,
-  padding: 12,
-  borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "rgba(255,255,255,0.04)",
-};
-
-const actionsRow: React.CSSProperties = {
-  display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
-  justifyContent: "flex-end",
-};
-
-const select: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.16)",
-  background: "rgba(255,255,255,0.06)",
-  color: "#e5e7eb",
-  fontWeight: 900,
-  outline: "none",
-  minWidth: 260,
 };
 
 const btnPrimary: React.CSSProperties = {
@@ -333,13 +174,6 @@ const btnPrimary: React.CSSProperties = {
   cursor: "pointer",
 };
 
-const btnSmallPrimary: React.CSSProperties = {
-  ...btnPrimary,
-  padding: "8px 10px",
-  borderRadius: 12,
-  fontWeight: 900,
-};
-
 const btnGhost: React.CSSProperties = {
   padding: "12px 14px",
   borderRadius: 14,
@@ -350,28 +184,23 @@ const btnGhost: React.CSSProperties = {
   cursor: "pointer",
 };
 
-const btnSmallGhost: React.CSSProperties = {
-  ...btnGhost,
-  padding: "8px 10px",
-  borderRadius: 12,
+const eventRow: React.CSSProperties = {
+  display: "block",
+  padding: 14,
+  borderRadius: 16,
+  background: "rgba(255,255,255,0.05)",
+  border: "1px solid rgba(255,255,255,0.10)",
+  textDecoration: "none",
+  color: "#e5e7eb",
 };
 
-const btnSmallDanger: React.CSSProperties = {
-  ...btnSmallGhost,
-  border: "1px solid rgba(248,113,113,0.35)",
-  background: "rgba(248,113,113,0.12)",
-};
-
-function statusPill(status: Invite["status"]): React.CSSProperties {
+function statusBox(ok: boolean): React.CSSProperties {
   return {
-    padding: "6px 10px",
-    borderRadius: 999,
-    border: "1px solid rgba(255,255,255,0.12)",
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 14,
     background: "rgba(255,255,255,0.06)",
-    fontWeight: 900,
-    fontSize: 12,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-    color: status === "accepted" ? "#86efac" : status === "declined" ? "#fca5a5" : "#e5e7eb",
+    border: "1px solid rgba(255,255,255,0.12)",
+    color: ok ? "#86efac" : "#fca5a5",
   };
 }

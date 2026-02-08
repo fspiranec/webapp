@@ -782,7 +782,7 @@ export default function EventPage() {
           )}
         </div>
 
-        <div style={threeColumnLayout}>
+        <div style={twoColumnLayout}>
           <div style={columnStack}>
             {/* PEOPLE COMING */}
             <Card>
@@ -798,13 +798,10 @@ export default function EventPage() {
                         <div key={m.user_id} style={rowStyle}>
                           <div style={{ flex: 1 }}>
                             <div style={{ fontWeight: 900 }}>
-                              {displayNameByUser(m.user_id, m.full_name, m.email)}
+                              {displayNameByUser(m.user_id, m.full_name, null)}
                               {m.user_id === event.creator_id ? " (creator)" : ""}
                               {m.user_id === me?.id ? " (you)" : ""}
                             </div>
-                            {m.email ? (
-                              <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>{m.email}</div>
-                            ) : null}
                           </div>
                         </div>
                       ))}
@@ -909,124 +906,6 @@ export default function EventPage() {
 
           </div>
 
-          <div style={columnStack}>
-            {/* ITEMS */}
-            <Card>
-              <h2 style={{ marginTop: 0 }}>Items</h2>
-
-              <div style={{ display: "grid", gap: 10 }}>
-                <input
-                  placeholder="Item name (e.g. Beer, Burgers, Plates)"
-                  value={newItemTitle}
-                  onChange={(e) => setNewItemTitle(e.target.value)}
-                  style={inputStyle}
-                />
-                <input
-                  placeholder="Notes (optional)"
-                  value={newItemNotes}
-                  onChange={(e) => setNewItemNotes(e.target.value)}
-                  style={inputStyle}
-                />
-
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <select value={newItemMode} onChange={(e) => setNewItemMode(e.target.value as any)} style={inputStyle}>
-                    <option value="single">Single claim</option>
-                    <option value="multi">Multi claim</option>
-                  </select>
-
-                  <button onClick={addItem} disabled={!newItemTitle.trim()} style={primaryBtnStyle(!newItemTitle.trim())}>
-                    + Add item
-                  </button>
-                </div>
-
-                {status && <div style={statusBoxStyle(status.startsWith("✅"))}>{status}</div>}
-              </div>
-
-              <hr style={hrStyle} />
-
-              {items.length === 0 ? (
-                <p style={{ color: "rgba(229,231,235,0.75)" }}>No items yet. Add the first one above.</p>
-              ) : (
-                <div style={{ display: "grid", gap: 10 }}>
-                  {items.map((it) => {
-                    const cs = claimsByItem.get(it.id) ?? [];
-                    const iClaimed = !!me && cs.some((c) => c.user_id === me.id);
-                    const canEdit = !!me && (it.created_by === me.id || isCreator);
-
-                    const claimText = hideClaims
-                      ? "🎁 Surprise mode: creator can’t see claims"
-                      : cs.length === 0
-                        ? "Not claimed yet"
-                        : it.claim_mode === "single"
-                          ? `Claimed by ${displayNameByUser(cs[0].user_id, cs[0].full_name, cs[0].email)}`
-                          : `Claimed by ${cs.map((c) => displayNameByUser(c.user_id, c.full_name, c.email)).join(", ")}`;
-
-                    const editing = editItemId === it.id;
-
-                    return (
-                      <div key={it.id} style={itemRowStyle}>
-                        <div style={{ flex: 1 }}>
-                          {editing ? (
-                            <div style={{ display: "grid", gap: 8 }}>
-                              <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={inputStyle} />
-                              <input value={editNotes} onChange={(e) => setEditNotes(e.target.value)} style={inputStyle} />
-                              <select value={editMode} onChange={(e) => setEditMode(e.target.value as any)} style={inputStyle}>
-                                <option value="single">Single claim</option>
-                                <option value="multi">Multi claim</option>
-                              </select>
-
-                              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                                <button style={btnPrimary} onClick={saveEdit}>Save</button>
-                                <button style={btnGhost} onClick={cancelEdit}>Cancel</button>
-                              </div>
-                            </div>
-                          ) : (
-                            <>
-                              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                                <b style={{ fontSize: 16 }}>{it.title}</b>
-                                <span style={pillStyle(it.claim_mode === "multi" ? "#34d399" : "#60a5fa")}>
-                                  {it.claim_mode.toUpperCase()}
-                                </span>
-                                {canEdit ? (
-                                  <span style={{ fontSize: 12, color: "rgba(229,231,235,0.7)" }}>(you can edit)</span>
-                                ) : null}
-                              </div>
-
-                              {it.notes && (
-                                <div style={{ marginTop: 6, color: "rgba(229,231,235,0.75)" }}>{it.notes}</div>
-                              )}
-
-                              <div style={{ marginTop: 8, color: "rgba(229,231,235,0.82)", fontSize: 13 }}>
-                                {claimText}
-                              </div>
-                            </>
-                          )}
-                        </div>
-
-                        {!editing && (
-                          <div style={itemActionRow}>
-                            {!iClaimed ? (
-                              <button onClick={() => claim(it.id)} style={smallBtnStyle}>Claim</button>
-                            ) : (
-                              <button onClick={() => unclaim(it.id)} style={smallBtnDangerStyle}>Unclaim</button>
-                            )}
-
-                            {canEdit && (
-                              <>
-                                <button onClick={() => startEdit(it)} style={btnGhostSmall}>Edit</button>
-                                <button onClick={() => deleteItem(it.id)} style={btnDangerSmall}>Delete</button>
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </Card>
-          </div>
-
           {/* POLLS */}
           <div style={columnStack}>
             {me && (
@@ -1042,6 +921,122 @@ export default function EventPage() {
             )}
           </div>
         </div>
+
+        {/* ITEMS */}
+        <Card>
+          <h2 style={{ marginTop: 0 }}>Items</h2>
+
+          <div style={{ display: "grid", gap: 10 }}>
+            <input
+              placeholder="Item name (e.g. Beer, Burgers, Plates)"
+              value={newItemTitle}
+              onChange={(e) => setNewItemTitle(e.target.value)}
+              style={inputStyle}
+            />
+            <input
+              placeholder="Notes (optional)"
+              value={newItemNotes}
+              onChange={(e) => setNewItemNotes(e.target.value)}
+              style={inputStyle}
+            />
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <select value={newItemMode} onChange={(e) => setNewItemMode(e.target.value as any)} style={inputStyle}>
+                <option value="single">Single claim</option>
+                <option value="multi">Multi claim</option>
+              </select>
+
+              <button onClick={addItem} disabled={!newItemTitle.trim()} style={primaryBtnStyle(!newItemTitle.trim())}>
+                + Add item
+              </button>
+            </div>
+
+            {status && <div style={statusBoxStyle(status.startsWith("✅"))}>{status}</div>}
+          </div>
+
+          <hr style={hrStyle} />
+
+          {items.length === 0 ? (
+            <p style={{ color: "rgba(229,231,235,0.75)" }}>No items yet. Add the first one above.</p>
+          ) : (
+            <div style={{ display: "grid", gap: 10 }}>
+              {items.map((it) => {
+                const cs = claimsByItem.get(it.id) ?? [];
+                const iClaimed = !!me && cs.some((c) => c.user_id === me.id);
+                const canEdit = !!me && (it.created_by === me.id || isCreator);
+
+                const claimText = hideClaims
+                  ? "🎁 Surprise mode: creator can’t see claims"
+                  : cs.length === 0
+                    ? "Not claimed yet"
+                    : it.claim_mode === "single"
+                      ? `Claimed by ${displayNameByUser(cs[0].user_id, cs[0].full_name, cs[0].email)}`
+                      : `Claimed by ${cs.map((c) => displayNameByUser(c.user_id, c.full_name, c.email)).join(", ")}`;
+
+                const editing = editItemId === it.id;
+
+                return (
+                  <div key={it.id} style={itemRowStyle}>
+                    <div style={{ flex: 1 }}>
+                      {editing ? (
+                        <div style={{ display: "grid", gap: 8 }}>
+                          <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={inputStyle} />
+                          <input value={editNotes} onChange={(e) => setEditNotes(e.target.value)} style={inputStyle} />
+                          <select value={editMode} onChange={(e) => setEditMode(e.target.value as any)} style={inputStyle}>
+                            <option value="single">Single claim</option>
+                            <option value="multi">Multi claim</option>
+                          </select>
+
+                          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                            <button style={btnPrimary} onClick={saveEdit}>Save</button>
+                            <button style={btnGhost} onClick={cancelEdit}>Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                            <b style={{ fontSize: 16 }}>{it.title}</b>
+                            <span style={pillStyle(it.claim_mode === "multi" ? "#34d399" : "#60a5fa")}>
+                              {it.claim_mode.toUpperCase()}
+                            </span>
+                            {canEdit ? (
+                              <span style={{ fontSize: 12, color: "rgba(229,231,235,0.7)" }}>(you can edit)</span>
+                            ) : null}
+                          </div>
+
+                          {it.notes && (
+                            <div style={{ marginTop: 6, color: "rgba(229,231,235,0.75)" }}>{it.notes}</div>
+                          )}
+
+                          <div style={{ marginTop: 8, color: "rgba(229,231,235,0.82)", fontSize: 13 }}>
+                            {claimText}
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {!editing && (
+                      <div style={itemActionRow}>
+                        {!iClaimed ? (
+                          <button onClick={() => claim(it.id)} style={smallBtnStyle}>Claim</button>
+                        ) : (
+                          <button onClick={() => unclaim(it.id)} style={smallBtnDangerStyle}>Unclaim</button>
+                        )}
+
+                        {canEdit && (
+                          <>
+                            <button onClick={() => startEdit(it)} style={btnGhostSmall}>Edit</button>
+                            <button onClick={() => deleteItem(it.id)} style={btnDangerSmall}>Delete</button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
 
         {/* CHAT */}
         <Card>
@@ -1172,10 +1167,10 @@ const topLayout: React.CSSProperties = {
   alignItems: "start",
 };
 
-const threeColumnLayout: React.CSSProperties = {
+const twoColumnLayout: React.CSSProperties = {
   display: "grid",
   gap: 16,
-  gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 0.85fr)",
+  gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
   alignItems: "start",
 };
 

@@ -48,6 +48,7 @@ export default function InvitesPage() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function accept(inv: InviteRow) {
@@ -55,30 +56,15 @@ export default function InvitesPage() {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
 
-    // 1) accept invite
-    const up = await supabase.from("event_invites").update({ accepted: true }).eq("id", inv.id);
-    if (up.error) {
-      setStatus(`❌ ${up.error.message}`);
-      return;
-    }
+    setStatus("Accepting…");
 
-    // 2) join event
-    const { data: sess } = await supabase.auth.getSession();
-    const userId = sess.session?.user.id;
-    if (!userId) {
-      setStatus("❌ Not logged in");
-      return;
-    }
-
-    const ins = await supabase.from("event_members").insert({
-      event_id: inv.event_id,
-      user_id: userId,
-      role: "member",
-      rsvp: "accepted",
+    // ✅ One RPC does everything (accept + join/rejoin)
+    const { error } = await supabase.rpc("accept_event_invite", {
+      invite_id: inv.id,
     });
 
-    if (ins.error) {
-      setStatus(`❌ ${ins.error.message}`);
+    if (error) {
+      setStatus(`❌ ${error.message}`);
       return;
     }
 
@@ -104,9 +90,7 @@ export default function InvitesPage() {
             Accept invites sent to your email address.
           </p>
 
-          {status && (
-            <div style={statusBoxStyle(status.startsWith("✅"))}>{status}</div>
-          )}
+          {status && <div style={statusBoxStyle(status.startsWith("✅"))}>{status}</div>}
 
           <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
             {invites.length === 0 ? (
@@ -126,7 +110,15 @@ export default function InvitesPage() {
                       Accept
                     </button>
                   ) : (
-                    <a href={`/events/${inv.event_id}`} style={{ ...btnPrimary, textDecoration: "none", display: "inline-block", textAlign: "center" }}>
+                    <a
+                      href={`/events/${inv.event_id}`}
+                      style={{
+                        ...btnPrimary,
+                        textDecoration: "none",
+                        display: "inline-block",
+                        textAlign: "center",
+                      }}
+                    >
                       Open
                     </a>
                   )}

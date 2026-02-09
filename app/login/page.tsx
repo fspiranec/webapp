@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { useIsMobile } from "@/lib/useIsMobile";
 
 export default function LoginPage() {
   const router = useRouter();
   const supabase = getSupabaseBrowserClient();
+  const isMobile = useIsMobile();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -31,9 +33,26 @@ export default function LoginPage() {
     router.push("/events");
   }
 
+  async function loginWithGoogle() {
+    setStatus("");
+    if (!supabase) return setStatus("❌ Supabase not ready");
+
+    setStatus("Redirecting to Google…");
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+
+    if (error) {
+      setStatus(`❌ ${error.message}`);
+    }
+  }
+
   return (
-    <div style={pageStyle}>
-      <div style={cardStyle}>
+    <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
+      <div style={{ ...cardStyle, maxWidth: isMobile ? "100%" : 460 }}>
         <h1 style={{ marginTop: 0 }}>Login</h1>
 
         <div style={hintStyle}>Existing users login here.</div>
@@ -57,6 +76,14 @@ export default function LoginPage() {
 
           <button onClick={login} style={btnPrimary}>
             Sign in
+          </button>
+
+          <div style={dividerStyle}>
+            <span style={dividerLabelStyle}>or</span>
+          </div>
+
+          <button onClick={loginWithGoogle} style={btnGhost}>
+            Continue with Google
           </button>
 
           <button onClick={() => router.push("/register")} style={btnGhost}>
@@ -125,6 +152,24 @@ const btnGhost: React.CSSProperties = {
   color: "#e5e7eb",
   fontWeight: 900,
   cursor: "pointer",
+};
+
+const dividerStyle: React.CSSProperties = {
+  position: "relative",
+  textAlign: "center",
+  height: 1,
+  background: "rgba(255,255,255,0.14)",
+  margin: "6px 0",
+};
+
+const dividerLabelStyle: React.CSSProperties = {
+  position: "relative",
+  top: -10,
+  padding: "0 10px",
+  fontSize: 12,
+  color: "rgba(229,231,235,0.75)",
+  background: "rgba(17,24,39,0.9)",
+  borderRadius: 999,
 };
 
 function statusBox(ok: boolean): React.CSSProperties {

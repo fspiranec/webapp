@@ -16,7 +16,15 @@ export default function AuthCallbackPage() {
       const user = data.user;
 
       if (user) {
-        await supabase.from("profiles").upsert({ id: user.id });
+        const fallbackName =
+          (typeof user.user_metadata?.full_name === "string" && user.user_metadata.full_name.trim()) ||
+          user.email ||
+          "Unknown user";
+        await supabase.from("profiles").upsert({
+          id: user.id,
+          full_name: fallbackName,
+          email: user.email ?? null,
+        });
         router.replace("/events");
       } else {
         router.replace("/login");

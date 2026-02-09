@@ -36,6 +36,7 @@ type EventRow = {
   title: string;
   type: string;
   starts_at: string | null;
+  ends_at: string | null;
   location: string | null;
   description: string | null;
   surprise_mode: boolean;
@@ -89,6 +90,18 @@ type MsgRow = {
   email: string | null;
 };
 
+type TaskRow = {
+  id: string;
+  event_id: string;
+  title: string;
+  description: string | null;
+  assignee_id: string | null;
+  visibility: "public" | "secret";
+  status: "todo" | "in_progress" | "done";
+  created_by: string;
+  created_at: string;
+};
+
 /* ================= PAGE ================= */
 
 export default function EventPage() {
@@ -103,6 +116,7 @@ export default function EventPage() {
   const [invites, setInvites] = useState<InviteRow[]>([]);
   const [friends, setFriends] = useState<FriendRow[]>([]);
   const [members, setMembers] = useState<MemberRow[]>([]);
+  const [tasks, setTasks] = useState<TaskRow[]>([]);
 
   // Polls
   const [polls, setPolls] = useState<PollRow[]>([]);
@@ -143,11 +157,40 @@ export default function EventPage() {
   const [msgText, setMsgText] = useState("");
   const [chatStatus, setChatStatus] = useState("");
 
+  // Tasks
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
+  const [taskAssigneeId, setTaskAssigneeId] = useState("");
+  const [taskVisibility, setTaskVisibility] = useState<"public" | "secret">("public");
+  const [taskStatus, setTaskStatus] = useState<"todo" | "in_progress" | "done">("todo");
+  const [taskStatusMsg, setTaskStatusMsg] = useState("");
+  const [editTaskId, setEditTaskId] = useState<string | null>(null);
+  const [editTaskTitle, setEditTaskTitle] = useState("");
+  const [editTaskDescription, setEditTaskDescription] = useState("");
+  const [editTaskAssigneeId, setEditTaskAssigneeId] = useState("");
+  const [editTaskVisibility, setEditTaskVisibility] = useState<"public" | "secret">("public");
+  const [editTaskStatus, setEditTaskStatus] = useState<"todo" | "in_progress" | "done">("todo");
+
   /* ================= HELPERS ================= */
 
   const isCreator = me?.id === event?.creator_id;
   const hideClaims = !!event?.surprise_mode && !!isCreator;
   const isBirthday = event?.type === "birthday";
+
+  function canViewTask(task: TaskRow) {
+    if (task.visibility === "public") return true;
+    if (isCreator) return true;
+    if (task.assignee_id && task.assignee_id === me?.id) return true;
+    return false;
+  }
+
+  function canUpdateTask(task: TaskRow) {
+    return !!isCreator;
+  }
+
+  function canChangeTaskStatus(task: TaskRow) {
+    return !!isCreator || (!!task.assignee_id && task.assignee_id === me?.id);
+  }
 
   const claimsByItem = useMemo(() => {
     const map = new Map<string, ClaimRow[]>();
@@ -172,12 +215,17 @@ export default function EventPage() {
     return friends.filter((f) => ids.includes(f.id));
   }, [selectedFriendIds, friends]);
 
-  function toggleFriend(id: string) {
-    setSelectedFriendIds((prev) => ({ ...prev, [id]: !prev[id] }));
-  }
-
   function clearSelected() {
     setSelectedFriendIds({});
+  }
+
+  function setSelectedFriendIdsFromSelect(selectedIds: string[]) {
+    setSelectedFriendIds(
+      selectedIds.reduce<Record<string, boolean>>((acc, id) => {
+        acc[id] = true;
+        return acc;
+      }, {})
+    );
   }
 
   /* ================= LOAD ALL ================= */
@@ -190,6 +238,7 @@ export default function EventPage() {
     setDeleteStatus("");
     setLeaveStatus("");
     setChatStatus("");
+    setTaskStatusMsg("");
 
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
@@ -355,6 +404,20 @@ export default function EventPage() {
 
     // Chat messages for current tab
     await loadMessages(chatTab);
+
+    // Tasks
+    const t = await supabase
+      .from("event_tasks")
+      .select("id,event_id,title,description,assignee_id,visibility,status,created_by,created_at")
+      .eq("event_id", eventId)
+      .order("created_at", { ascending: false });
+
+    if (t.error) {
+      setTaskStatusMsg(`❌ ${t.error.message}`);
+      setTasks([]);
+    } else {
+      setTasks((t.data ?? []) as TaskRow[]);
+    }
 
     setLoading(false);
   }
@@ -713,6 +776,121 @@ export default function EventPage() {
     await loadMessages(chatTab);
   }
 
+  /* ================= TASKS ================= */
+
+  async function createTask() {
+    if (!me || !isCreator) return;
+    setTaskStatusMsg("");
+
+    const title = taskTitle.trim();
+    if (!title) {
+      setTaskStatusMsg("❌ Task title is required");
+      return;
+    }
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    const res = await supabase.from("event_tasks").insert({
+      event_id: eventId,
+      title,
+      description: taskDescription.trim() ? taskDescription.trim() : null,
+      assignee_id: taskAssigneeId || null,
+      visibility: taskVisibility,
+      status: taskStatus,
+      created_by: me.id,
+    });
+
+    if (res.error) {
+      setTaskStatusMsg(`❌ ${res.error.message}`);
+      return;
+    }
+
+    setTaskTitle("");
+    setTaskDescription("");
+    setTaskAssigneeId("");
+    setTaskVisibility("public");
+    setTaskStatus("todo");
+    setTaskStatusMsg("✅ Task created");
+    await loadAll();
+  }
+
+  function startTaskEdit(task: TaskRow) {
+    setEditTaskId(task.id);
+    setEditTaskTitle(task.title);
+    setEditTaskDescription(task.description ?? "");
+    setEditTaskAssigneeId(task.assignee_id ?? "");
+    setEditTaskVisibility(task.visibility);
+    setEditTaskStatus(task.status);
+    setTaskStatusMsg("");
+  }
+
+  function cancelTaskEdit() {
+    setEditTaskId(null);
+    setEditTaskTitle("");
+    setEditTaskDescription("");
+    setEditTaskAssigneeId("");
+    setEditTaskVisibility("public");
+    setEditTaskStatus("todo");
+  }
+
+  async function saveTaskEdit() {
+    if (!editTaskId || !isCreator) return;
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    const res = await supabase
+      .from("event_tasks")
+      .update({
+        title: editTaskTitle.trim(),
+        description: editTaskDescription.trim() ? editTaskDescription.trim() : null,
+        assignee_id: editTaskAssigneeId || null,
+        visibility: editTaskVisibility,
+        status: editTaskStatus,
+      })
+      .eq("id", editTaskId)
+      .eq("event_id", eventId);
+
+    if (res.error) {
+      setTaskStatusMsg(`❌ ${res.error.message}`);
+      return;
+    }
+
+    setTaskStatusMsg("✅ Task updated");
+    cancelTaskEdit();
+    await loadAll();
+  }
+
+  async function deleteTask(taskId: string) {
+    if (!isCreator) return;
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    const res = await supabase.from("event_tasks").delete().eq("id", taskId).eq("event_id", eventId);
+    if (res.error) {
+      setTaskStatusMsg(`❌ ${res.error.message}`);
+      return;
+    }
+
+    setTaskStatusMsg("✅ Task deleted");
+    await loadAll();
+  }
+
+  async function updateTaskStatus(task: TaskRow, status: TaskRow["status"]) {
+    if (!canChangeTaskStatus(task)) return;
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    const res = await supabase.from("event_tasks").update({ status }).eq("id", task.id).eq("event_id", eventId);
+    if (res.error) {
+      setTaskStatusMsg(`❌ ${res.error.message}`);
+      return;
+    }
+
+    setTaskStatusMsg("✅ Task status updated");
+    await loadAll();
+  }
+
   /* ================= UI ================= */
 
   if (loading) return <div style={pageStyle}><Card><p>Loading…</p></Card></div>;
@@ -734,152 +912,368 @@ export default function EventPage() {
       <div style={{ maxWidth: 980, margin: "0 auto", color: "#e5e7eb", fontFamily: "system-ui" }}>
         <a href="/events" style={linkStyle}>← Back to events</a>
 
-        <Card>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-            <div>
-              <h1 style={{ margin: 0 }}>{event.title}</h1>
-              <div style={{ color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
-                <b>{event.type}</b> {event.surprise_mode ? "• 🎁 surprise mode" : ""}
-              </div>
-              {event.starts_at && <div style={{ marginTop: 6 }}>🗓 {new Date(event.starts_at).toLocaleString()}</div>}
-              {event.location && <div style={{ marginTop: 6 }}>📍 {event.location}</div>}
-            </div>
-
-            <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
-              {me?.email ? <>Signed in as <b>{me.email}</b></> : null}
-              <div style={{ marginTop: 6 }}>
-                <a href="/profile" style={navLink}>Profile</a>{" "}
-                <a href="/invites" style={navLink}>Invites</a>
-              </div>
-            </div>
-          </div>
-
-          {event.description && <p style={{ marginTop: 12, color: "rgba(229,231,235,0.85)" }}>{event.description}</p>}
-        </Card>
-
-        {/* PEOPLE COMING */}
-        <Card>
-          <h2 style={{ marginTop: 0 }}>People coming</h2>
-          <div style={{ display: "grid", gap: 10 }}>
-            {members.length === 0 ? (
-              <div style={{ color: "rgba(229,231,235,0.75)" }}>No members found.</div>
-            ) : (
-              members.map((m) => (
-                <div key={m.user_id} style={rowStyle}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 900 }}>
-                      {displayNameByUser(m.user_id, m.full_name, m.email)}
-                      {m.user_id === event.creator_id ? " (creator)" : ""}
-                      {m.user_id === me?.id ? " (you)" : ""}
-                    </div>
-                    {m.email ? <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>{m.email}</div> : null}
-                  </div>
-                </div>
-              ))
-            )}
-
-            {!isCreator && (
-              <div style={{ marginTop: 8 }}>
-                <button onClick={leaveEvent} style={btnDanger}>Leave event</button>
-                {leaveStatus && <div style={statusBoxStyle(leaveStatus.startsWith("✅"))}>{leaveStatus}</div>}
-              </div>
-            )}
-          </div>
-        </Card>
-
-        {/* INVITES */}
-        {isCreator && (
+        <div style={topLayout}>
           <Card>
-            <h2 style={{ marginTop: 0 }}>Invites</h2>
-
-            <div style={{ marginTop: 10 }}>
-              <div style={{ fontWeight: 900, marginBottom: 8 }}>Invite multiple friends</div>
-
-              {friends.length === 0 ? (
-                <div style={{ color: "rgba(229,231,235,0.75)" }}>
-                  No friends yet. Add them in <a href="/profile" style={navLink}>/profile</a>.
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div>
+                <h1 style={{ margin: 0 }}>{event.title}</h1>
+                <div style={{ color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
+                  <b>{event.type}</b> {event.surprise_mode ? "• 🎁 surprise mode" : ""}
                 </div>
-              ) : (
-                <div style={{ display: "grid", gap: 8 }}>
-                  {friends.map((f) => (
-                    <label key={f.id} style={friendRow}>
-                      <input
-                        type="checkbox"
-                        checked={!!selectedFriendIds[f.id]}
-                        onChange={() => toggleFriend(f.id)}
-                        style={{ width: 18, height: 18 }}
-                      />
-                      <div style={{ display: "flex", flexDirection: "column" }}>
-                        <b>{f.friend_name ? f.friend_name : f.friend_email}</b>
-                        <span style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>{f.friend_email}</span>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              )}
-
-              <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
-                <button onClick={inviteSelectedFriends} style={btnPrimary}>
-                  Invite selected ({selectedFriends.length})
-                </button>
-                <button onClick={clearSelected} style={btnGhost}>Clear selection</button>
+                {event.starts_at && (
+                  <div style={{ marginTop: 6 }}>
+                    🗓 {new Date(event.starts_at).toLocaleString()}
+                    {event.ends_at ? ` — ${new Date(event.ends_at).toLocaleString()}` : ""}
+                  </div>
+                )}
+                {event.location && <div style={{ marginTop: 6 }}>📍 {event.location}</div>}
               </div>
 
-              {bulkStatus && <div style={statusBoxStyle(bulkStatus.startsWith("✅"))}>{bulkStatus}</div>}
+              <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
+                {me?.email ? <>Signed in as <b>{me.email}</b></> : null}
+                <div style={{ marginTop: 6 }}>
+                  <a href="/profile" style={navLink}>Profile</a>{" "}
+                  <a href="/invites" style={navLink}>Invites</a>
+                </div>
+                {isCreator && (
+                  <div style={{ marginTop: 10 }}>
+                    <button onClick={() => router.push(`/events/${event.id}/edit`)} style={btnGhost}>
+                      Edit event
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
-            <hr style={hrStyle} />
+            {event.description && <p style={{ marginTop: 12, color: "rgba(229,231,235,0.85)" }}>{event.description}</p>}
+          </Card>
 
-            <div style={{ display: "grid", gap: 10 }}>
-              <select
-                value=""
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val) setInviteEmail(val);
-                }}
+          {isCreator && (
+            <Card>
+              <h2 style={{ marginTop: 0, color: "#fecaca" }}>Danger zone</h2>
+              <p style={{ color: "rgba(229,231,235,0.75)" }}>Delete event (requires your password).</p>
+
+              <input
+                type="password"
+                value={deletePw}
+                onChange={(e) => setDeletePw(e.target.value)}
+                placeholder="Your password"
                 style={inputStyle}
-              >
-                <option value="">👇 Choose one friend (optional)</option>
-                {friends.map((f) => (
-                  <option key={f.id} value={f.friend_email}>
-                    {f.friend_name ? `${f.friend_name} — ${f.friend_email}` : f.friend_email}
-                  </option>
-                ))}
-              </select>
+              />
+              <button onClick={deleteEventWithPassword} style={btnDanger}>Delete event permanently</button>
 
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <input
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="friend@email.com"
-                  style={inputStyle}
-                />
-                <button onClick={sendSingleInvite} style={btnPrimary}>Send invite</button>
+              {deleteStatus && <div style={statusBoxStyle(deleteStatus.startsWith("✅"))}>{deleteStatus}</div>}
+            </Card>
+          )}
+        </div>
+
+        <div style={twoColumnLayout}>
+          <div style={columnStack}>
+            {/* PEOPLE COMING */}
+            <Card>
+              <h2 style={{ marginTop: 0 }}>People coming</h2>
+              <div style={{ display: "grid", gap: 10 }}>
+                {members.length === 0 ? (
+                  <div style={{ color: "rgba(229,231,235,0.75)" }}>No members found.</div>
+                ) : (
+                  <details style={detailsStyle} open>
+                    <summary style={summaryStyle}>People list ({members.length})</summary>
+                    <div style={peopleListStyle}>
+                      {members.map((m) => (
+                        <div key={m.user_id} style={rowStyle}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 900 }}>
+                              {displayNameByUser(m.user_id, m.full_name, null)}
+                              {m.user_id === event.creator_id ? " (creator)" : ""}
+                              {m.user_id === me?.id ? " (you)" : ""}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+
+                {!isCreator && (
+                  <div style={{ marginTop: 8 }}>
+                    <button onClick={leaveEvent} style={btnDanger}>Leave event</button>
+                    {leaveStatus && <div style={statusBoxStyle(leaveStatus.startsWith("✅"))}>{leaveStatus}</div>}
+                  </div>
+                )}
               </div>
 
-              {inviteStatus && <div style={statusBoxStyle(inviteStatus.startsWith("✅"))}>{inviteStatus}</div>}
-            </div>
+              {/* INVITES */}
+              {isCreator && (
+                <div style={{ marginTop: 16 }}>
+                  <h3 style={{ margin: 0 }}>Invites</h3>
 
-            <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
-              {invites.length === 0 ? (
-                <div style={{ color: "rgba(229,231,235,0.75)" }}>No invites yet.</div>
-              ) : (
-                invites.map((inv) => (
-                  <div key={inv.id} style={rowStyle}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 900 }}>{inv.email}</div>
-                      <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
-                        {inv.accepted ? "✅ Accepted" : "Pending"} • {new Date(inv.created_at).toLocaleString()}
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ fontWeight: 900, marginBottom: 8 }}>Invite multiple friends</div>
+
+                    {friends.length === 0 ? (
+                      <div style={{ color: "rgba(229,231,235,0.75)" }}>
+                        No friends yet. Add them in <a href="/profile" style={navLink}>/profile</a>.
                       </div>
+                    ) : (
+                      <select
+                        multiple
+                        value={selectedFriends.map((f) => f.id)}
+                        onChange={(e) => {
+                          const ids = Array.from(e.target.selectedOptions)
+                            .map((opt) => opt.value)
+                            .filter(Boolean);
+                          setSelectedFriendIdsFromSelect(ids);
+                        }}
+                        style={{ ...inputStyle, minHeight: 140 }}
+                      >
+                        {friends.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.friend_name ? `${f.friend_name} — ${f.friend_email}` : f.friend_email}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                      <button onClick={inviteSelectedFriends} style={btnPrimary}>
+                        Invite selected ({selectedFriends.length})
+                      </button>
+                      <button onClick={clearSelected} style={btnGhost}>Clear selection</button>
                     </div>
 
-                    <button style={btnDangerSmall} onClick={() => uninvite(inv.id)}>Uninvite</button>
+                    {bulkStatus && <div style={statusBoxStyle(bulkStatus.startsWith("✅"))}>{bulkStatus}</div>}
                   </div>
-                ))
+
+                  <hr style={hrStyle} />
+
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                      <input
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                        placeholder="friend@email.com"
+                        style={inputStyle}
+                      />
+                      <button onClick={sendSingleInvite} style={btnPrimary}>Send invite</button>
+                    </div>
+
+                    {inviteStatus && <div style={statusBoxStyle(inviteStatus.startsWith("✅"))}>{inviteStatus}</div>}
+                  </div>
+
+                  <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
+                    {invites.length === 0 ? (
+                      <div style={{ color: "rgba(229,231,235,0.75)" }}>No invites yet.</div>
+                    ) : (
+                      <details style={detailsStyle}>
+                        <summary style={summaryStyle}>
+                          Invited people ({invites.length})
+                        </summary>
+                        <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+                          {invites.map((inv) => (
+                            <div key={inv.id} style={rowStyle}>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 900 }}>{inv.email}</div>
+                                <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
+                                  {inv.accepted ? "✅ Accepted" : "Pending"} • {new Date(inv.created_at).toLocaleString()}
+                                </div>
+                              </div>
+
+                              <button style={btnDangerSmall} onClick={() => uninvite(inv.id)}>Uninvite</button>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                  </div>
+                </div>
               )}
-            </div>
-          </Card>
-        )}
+            </Card>
+
+          </div>
+
+          {/* POLLS */}
+          <div style={columnStack}>
+            {me && (
+              <PollsCard
+                eventId={eventId}
+                meId={me.id}
+                isCreator={!!isCreator}
+                polls={polls}
+                options={pollOptions}
+                votes={pollVotes}
+                onReload={loadAll}
+              />
+            )}
+
+            {/* TASKS */}
+            <Card>
+              <h2 style={{ marginTop: 0 }}>Tasks</h2>
+
+              {isCreator && (
+                <div style={{ display: "grid", gap: 10 }}>
+                  <input
+                    placeholder="Task title"
+                    value={taskTitle}
+                    onChange={(e) => setTaskTitle(e.target.value)}
+                    style={inputStyle}
+                  />
+                  <textarea
+                    placeholder="Task description"
+                    value={taskDescription}
+                    onChange={(e) => setTaskDescription(e.target.value)}
+                    style={{ ...inputStyle, minHeight: 90, resize: "vertical" as const }}
+                  />
+                  <select
+                    value={taskAssigneeId}
+                    onChange={(e) => setTaskAssigneeId(e.target.value)}
+                    style={inputStyle}
+                  >
+                    <option value="">Assign to…</option>
+                    {members.map((m) => (
+                      <option key={m.user_id} value={m.user_id}>
+                        {displayNameByUser(m.user_id, m.full_name, null)}
+                      </option>
+                    ))}
+                  </select>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <select
+                      value={taskVisibility}
+                      onChange={(e) => setTaskVisibility(e.target.value as "public" | "secret")}
+                      style={inputStyle}
+                    >
+                      <option value="public">Public</option>
+                      <option value="secret">Secret</option>
+                    </select>
+                    <select
+                      value={taskStatus}
+                      onChange={(e) => setTaskStatus(e.target.value as "todo" | "in_progress" | "done")}
+                      style={inputStyle}
+                    >
+                      <option value="todo">To do</option>
+                      <option value="in_progress">In progress</option>
+                      <option value="done">Done</option>
+                    </select>
+                  </div>
+                  <button onClick={createTask} disabled={!taskTitle.trim()} style={primaryBtnStyle(!taskTitle.trim())}>
+                    + Add task
+                  </button>
+                </div>
+              )}
+
+              {taskStatusMsg && <div style={statusBoxStyle(taskStatusMsg.startsWith("✅"))}>{taskStatusMsg}</div>}
+
+              <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+                {tasks.filter(canViewTask).length === 0 ? (
+                  <div style={{ color: "rgba(229,231,235,0.75)" }}>No tasks yet.</div>
+                ) : (
+                  tasks.filter(canViewTask).map((task) => {
+                    const editing = editTaskId === task.id;
+                    const assignee = task.assignee_id
+                      ? members.find((m) => m.user_id === task.assignee_id)
+                      : null;
+
+                    return (
+                      <div key={task.id} style={rowStyle}>
+                        <div style={{ flex: 1 }}>
+                          {editing ? (
+                            <div style={{ display: "grid", gap: 8 }}>
+                              <input
+                                value={editTaskTitle}
+                                onChange={(e) => setEditTaskTitle(e.target.value)}
+                                style={inputStyle}
+                              />
+                              <textarea
+                                value={editTaskDescription}
+                                onChange={(e) => setEditTaskDescription(e.target.value)}
+                                style={{ ...inputStyle, minHeight: 90, resize: "vertical" as const }}
+                              />
+                              <select
+                                value={editTaskAssigneeId}
+                                onChange={(e) => setEditTaskAssigneeId(e.target.value)}
+                                style={inputStyle}
+                              >
+                                <option value="">Assign to…</option>
+                                {members.map((m) => (
+                                  <option key={m.user_id} value={m.user_id}>
+                                    {displayNameByUser(m.user_id, m.full_name, null)}
+                                  </option>
+                                ))}
+                              </select>
+                              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                                <select
+                                  value={editTaskVisibility}
+                                  onChange={(e) => setEditTaskVisibility(e.target.value as "public" | "secret")}
+                                  style={inputStyle}
+                                >
+                                  <option value="public">Public</option>
+                                  <option value="secret">Secret</option>
+                                </select>
+                                <select
+                                  value={editTaskStatus}
+                                  onChange={(e) => setEditTaskStatus(e.target.value as "todo" | "in_progress" | "done")}
+                                  style={inputStyle}
+                                >
+                                  <option value="todo">To do</option>
+                                  <option value="in_progress">In progress</option>
+                                  <option value="done">Done</option>
+                                </select>
+                              </div>
+                              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                                <button onClick={saveTaskEdit} style={btnPrimary}>Save</button>
+                                <button onClick={cancelTaskEdit} style={btnGhost}>Cancel</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                                <b style={{ fontSize: 16 }}>{task.title}</b>
+                                <span style={pillStyle(taskStatusColor(task.status))}>
+                                  {task.status.replace("_", " ").toUpperCase()}
+                                </span>
+                                <span style={pillStyle(task.visibility === "secret" ? "#fca5a5" : "#93c5fd")}>
+                                  {task.visibility.toUpperCase()}
+                                </span>
+                              </div>
+                              {task.description && (
+                                <div style={{ marginTop: 6, color: "rgba(229,231,235,0.8)" }}>
+                                  {task.description}
+                                </div>
+                              )}
+                              <div style={{ marginTop: 6, color: "rgba(229,231,235,0.7)", fontSize: 13 }}>
+                                {assignee ? `Assigned to ${displayNameByUser(assignee.user_id, assignee.full_name, null)}` : "Unassigned"}
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        {!editing && (
+                          <div style={itemActionRow}>
+                            <select
+                              value={task.status}
+                              onChange={(e) => updateTaskStatus(task, e.target.value as TaskRow["status"])}
+                              disabled={!canChangeTaskStatus(task)}
+                              style={inputStyle}
+                            >
+                              <option value="todo">To do</option>
+                              <option value="in_progress">In progress</option>
+                              <option value="done">Done</option>
+                            </select>
+                            {canUpdateTask(task) && (
+                              <>
+                                <button onClick={() => startTaskEdit(task)} style={btnGhostSmall}>Edit</button>
+                                <button onClick={() => deleteTask(task.id)} style={btnDangerSmall}>Delete</button>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </Card>
+          </div>
+        </div>
 
         {/* ITEMS */}
         <Card>
@@ -963,7 +1357,9 @@ export default function EventPage() {
                             ) : null}
                           </div>
 
-                          {it.notes && <div style={{ marginTop: 6, color: "rgba(229,231,235,0.75)" }}>{it.notes}</div>}
+                          {it.notes && (
+                            <div style={{ marginTop: 6, color: "rgba(229,231,235,0.75)" }}>{it.notes}</div>
+                          )}
 
                           <div style={{ marginTop: 8, color: "rgba(229,231,235,0.82)", fontSize: 13 }}>
                             {claimText}
@@ -973,7 +1369,7 @@ export default function EventPage() {
                     </div>
 
                     {!editing && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+                      <div style={itemActionRow}>
                         {!iClaimed ? (
                           <button onClick={() => claim(it.id)} style={smallBtnStyle}>Claim</button>
                         ) : (
@@ -994,19 +1390,6 @@ export default function EventPage() {
             </div>
           )}
         </Card>
-
-        {/* POLLS */}
-        {me && (
-          <PollsCard
-            eventId={eventId}
-            meId={me.id}
-            isCreator={!!isCreator}
-            polls={polls}
-            options={pollOptions}
-            votes={pollVotes}
-            onReload={loadAll}
-          />
-        )}
 
         {/* CHAT */}
         <Card>
@@ -1054,24 +1437,6 @@ export default function EventPage() {
           </div>
         </Card>
 
-        {/* DELETE EVENT */}
-        {isCreator && (
-          <Card>
-            <h2 style={{ marginTop: 0, color: "#fecaca" }}>Danger zone</h2>
-            <p style={{ color: "rgba(229,231,235,0.75)" }}>Delete event (requires your password).</p>
-
-            <input
-              type="password"
-              value={deletePw}
-              onChange={(e) => setDeletePw(e.target.value)}
-              placeholder="Your password"
-              style={inputStyle}
-            />
-            <button onClick={deleteEventWithPassword} style={btnDanger}>Delete event permanently</button>
-
-            {deleteStatus && <div style={statusBoxStyle(deleteStatus.startsWith("✅"))}>{deleteStatus}</div>}
-          </Card>
-        )}
       </div>
     </div>
   );
@@ -1130,6 +1495,14 @@ const itemRowStyle: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
 };
 
+const itemActionRow: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  alignItems: "center",
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
+};
+
 const rowStyle: React.CSSProperties = {
   display: "flex",
   gap: 12,
@@ -1140,14 +1513,46 @@ const rowStyle: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
 };
 
-const friendRow: React.CSSProperties = {
-  display: "flex",
-  gap: 12,
-  alignItems: "center",
-  padding: 12,
+const topLayout: React.CSSProperties = {
+  display: "grid",
+  gap: 16,
+  gridTemplateColumns: "minmax(0, 1.8fr) minmax(0, 0.9fr)",
+  alignItems: "start",
+};
+
+const twoColumnLayout: React.CSSProperties = {
+  display: "grid",
+  gap: 16,
+  gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+  alignItems: "start",
+};
+
+const columnStack: React.CSSProperties = {
+  display: "grid",
+  gap: 14,
+};
+
+const detailsStyle: React.CSSProperties = {
   borderRadius: 14,
-  background: "rgba(255,255,255,0.05)",
   border: "1px solid rgba(255,255,255,0.10)",
+  background: "rgba(255,255,255,0.05)",
+  padding: 10,
+};
+
+const peopleListStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+  marginTop: 12,
+  maxHeight: 320,
+  overflowY: "auto",
+  paddingRight: 2,
+};
+
+const summaryStyle: React.CSSProperties = {
+  cursor: "pointer",
+  fontWeight: 800,
+  color: "#e5e7eb",
+  listStyle: "none",
 };
 
 const chatBox: React.CSSProperties = {
@@ -1169,6 +1574,18 @@ function pillStyle(color: string): React.CSSProperties {
     color,
     background: "rgba(0,0,0,0.15)",
   };
+}
+
+function taskStatusColor(status: TaskRow["status"]) {
+  switch (status) {
+    case "done":
+      return "#34d399";
+    case "in_progress":
+      return "#fbbf24";
+    case "todo":
+    default:
+      return "#60a5fa";
+  }
 }
 
 function primaryBtnStyle(disabled: boolean): React.CSSProperties {

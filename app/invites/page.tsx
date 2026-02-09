@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { useIsMobile } from "@/lib/useIsMobile";
 
 type InviteRow = {
   id: string;
@@ -15,6 +16,7 @@ type InviteRow = {
 
 export default function InvitesPage() {
   const router = useRouter();
+  const isMobile = useIsMobile();
   const [invites, setInvites] = useState<InviteRow[]>([]);
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
@@ -73,11 +75,18 @@ export default function InvitesPage() {
     router.push(`/events/${inv.event_id}`);
   }
 
-  if (loading) return <div style={pageStyle}><Card>Loading…</Card></div>;
+  if (loading) return <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}><Card>Loading…</Card></div>;
 
   return (
-    <div style={pageStyle}>
-      <div style={{ maxWidth: 900, margin: "0 auto", fontFamily: "system-ui", color: "#e5e7eb" }}>
+    <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
+      <div
+        style={{
+          maxWidth: isMobile ? "100%" : 900,
+          margin: "0 auto",
+          fontFamily: "system-ui",
+          color: "#e5e7eb",
+        }}
+      >
         <Card>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
             <h1 style={{ margin: 0 }}>Invites</h1>
@@ -97,7 +106,14 @@ export default function InvitesPage() {
               <div style={{ color: "rgba(229,231,235,0.75)" }}>No invites yet.</div>
             ) : (
               invites.map((inv) => (
-                <div key={inv.id} style={rowStyle}>
+                <div
+                  key={inv.id}
+                  style={{
+                    ...rowStyle,
+                    flexDirection: isMobile ? "column" : "row",
+                    alignItems: isMobile ? "flex-start" : "center",
+                  }}
+                >
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 900 }}>{inv.events?.title ?? "Event"}</div>
                     <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>

@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { useIsMobile } from "@/lib/useIsMobile";
 
 export default function RegisterPage() {
   const router = useRouter();
   const supabase = getSupabaseBrowserClient();
+  const isMobile = useIsMobile();
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -78,8 +80,8 @@ export default function RegisterPage() {
   }
 
   return (
-    <div style={pageStyle}>
-      <div style={cardStyle}>
+    <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
+      <div style={{ ...cardStyle, maxWidth: isMobile ? "100%" : 520 }}>
         <h1 style={{ marginTop: 0 }}>Create account</h1>
 
         <div style={hintStyle}>
@@ -87,7 +89,7 @@ export default function RegisterPage() {
         </div>
 
         <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
             <input
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
@@ -211,4 +213,3 @@ function statusBox(ok: boolean): React.CSSProperties {
     color: ok ? "#86efac" : "#fca5a5",
   };
 }
-

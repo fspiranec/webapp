@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { useIsMobile } from "@/lib/useIsMobile";
 
 type EventType = "grill" | "birthday" | "other";
 
@@ -12,6 +13,7 @@ type EventRow = {
   title: string;
   type: EventType;
   starts_at: string | null;
+  ends_at: string | null;
   location: string | null;
   description: string | null;
   surprise_mode: boolean;
@@ -20,11 +22,13 @@ type EventRow = {
 export default function EditEventPage() {
   const { id: eventId } = useParams<{ id: string }>();
   const router = useRouter();
+  const isMobile = useIsMobile();
 
   const [event, setEvent] = useState<EventRow | null>(null);
   const [title, setTitle] = useState("");
   const [type, setType] = useState<EventType>("grill");
   const [startsAt, setStartsAt] = useState("");
+  const [endsAt, setEndsAt] = useState("");
   const [location, setLocation] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState("");
@@ -43,7 +47,7 @@ export default function EditEventPage() {
 
       const { data: eventData, error } = await supabase
         .from("events")
-        .select("id,creator_id,title,type,starts_at,location,description,surprise_mode")
+        .select("id,creator_id,title,type,starts_at,ends_at,location,description,surprise_mode")
         .eq("id", eventId)
         .single();
 
@@ -64,6 +68,7 @@ export default function EditEventPage() {
       setTitle(row.title ?? "");
       setType(row.type ?? "grill");
       setStartsAt(row.starts_at ? new Date(row.starts_at).toISOString().slice(0, 16) : "");
+      setEndsAt(row.ends_at ? new Date(row.ends_at).toISOString().slice(0, 16) : "");
       setLocation(row.location ?? "");
       setDescription(row.description ?? "");
       setLoading(false);
@@ -88,6 +93,7 @@ export default function EditEventPage() {
           title: title.trim(),
           type,
           starts_at: startsAt ? new Date(startsAt).toISOString() : null,
+          ends_at: endsAt ? new Date(endsAt).toISOString() : null,
           location: location.trim() ? location.trim() : null,
           description: description.trim() ? description.trim() : null,
           surprise_mode,
@@ -107,8 +113,8 @@ export default function EditEventPage() {
 
   if (loading) {
     return (
-      <div style={pageStyle}>
-        <div style={containerStyle}>
+      <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
+        <div style={{ ...containerStyle, maxWidth: isMobile ? "100%" : 720 }}>
           <a href={`/events/${eventId}`} style={linkStyle}>← Back to event</a>
           <div style={cardStyle}>
             <p>Loading…</p>
@@ -120,8 +126,8 @@ export default function EditEventPage() {
 
   if (!event) {
     return (
-      <div style={pageStyle}>
-        <div style={containerStyle}>
+      <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
+        <div style={{ ...containerStyle, maxWidth: isMobile ? "100%" : 720 }}>
           <a href="/events" style={linkStyle}>← Back to events</a>
           <div style={cardStyle}>
             <h2 style={{ margin: 0 }}>Event not found</h2>
@@ -133,8 +139,8 @@ export default function EditEventPage() {
   }
 
   return (
-    <div style={pageStyle}>
-      <div style={containerStyle}>
+    <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
+      <div style={{ ...containerStyle, maxWidth: isMobile ? "100%" : 720 }}>
         <a href={`/events/${eventId}`} style={linkStyle}>
           ← Back to event
         </a>
@@ -168,6 +174,15 @@ export default function EditEventPage() {
                 type="datetime-local"
                 value={startsAt}
                 onChange={(e) => setStartsAt(e.target.value)}
+                style={inputStyle}
+              />
+            </Field>
+
+            <Field label="End time">
+              <input
+                type="datetime-local"
+                value={endsAt}
+                onChange={(e) => setEndsAt(e.target.value)}
                 style={inputStyle}
               />
             </Field>

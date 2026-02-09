@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { useIsMobile } from "@/lib/useIsMobile";
 import PollsCard from "./PollsCard";
 
 /* ================= TYPES ================= */
@@ -36,6 +37,7 @@ type EventRow = {
   title: string;
   type: string;
   starts_at: string | null;
+  ends_at: string | null;
   location: string | null;
   description: string | null;
   surprise_mode: boolean;
@@ -89,11 +91,24 @@ type MsgRow = {
   email: string | null;
 };
 
+type TaskRow = {
+  id: string;
+  event_id: string;
+  title: string;
+  description: string | null;
+  assignee_id: string | null;
+  visibility: "public" | "secret";
+  status: "todo" | "in_progress" | "done";
+  created_by: string;
+  created_at: string;
+};
+
 /* ================= PAGE ================= */
 
 export default function EventPage() {
   const { id: eventId } = useParams<{ id: string }>();
   const router = useRouter();
+  const isMobile = useIsMobile();
 
   const [me, setMe] = useState<{ id: string; email?: string } | null>(null);
 
@@ -103,6 +118,7 @@ export default function EventPage() {
   const [invites, setInvites] = useState<InviteRow[]>([]);
   const [friends, setFriends] = useState<FriendRow[]>([]);
   const [members, setMembers] = useState<MemberRow[]>([]);
+  const [tasks, setTasks] = useState<TaskRow[]>([]);
 
   // Polls
   const [polls, setPolls] = useState<PollRow[]>([]);
@@ -143,11 +159,40 @@ export default function EventPage() {
   const [msgText, setMsgText] = useState("");
   const [chatStatus, setChatStatus] = useState("");
 
+  // Tasks
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
+  const [taskAssigneeId, setTaskAssigneeId] = useState("");
+  const [taskVisibility, setTaskVisibility] = useState<"public" | "secret">("public");
+  const [taskStatus, setTaskStatus] = useState<"todo" | "in_progress" | "done">("todo");
+  const [taskStatusMsg, setTaskStatusMsg] = useState("");
+  const [editTaskId, setEditTaskId] = useState<string | null>(null);
+  const [editTaskTitle, setEditTaskTitle] = useState("");
+  const [editTaskDescription, setEditTaskDescription] = useState("");
+  const [editTaskAssigneeId, setEditTaskAssigneeId] = useState("");
+  const [editTaskVisibility, setEditTaskVisibility] = useState<"public" | "secret">("public");
+  const [editTaskStatus, setEditTaskStatus] = useState<"todo" | "in_progress" | "done">("todo");
+
   /* ================= HELPERS ================= */
 
   const isCreator = me?.id === event?.creator_id;
   const hideClaims = !!event?.surprise_mode && !!isCreator;
   const isBirthday = event?.type === "birthday";
+
+  function canViewTask(task: TaskRow) {
+    if (task.visibility === "public") return true;
+    if (isCreator) return true;
+    if (task.assignee_id && task.assignee_id === me?.id) return true;
+    return false;
+  }
+
+  function canUpdateTask(task: TaskRow) {
+    return !!isCreator;
+  }
+
+  function canChangeTaskStatus(task: TaskRow) {
+    return !!isCreator || (!!task.assignee_id && task.assignee_id === me?.id);
+  }
 
   const claimsByItem = useMemo(() => {
     const map = new Map<string, ClaimRow[]>();
@@ -195,6 +240,7 @@ export default function EventPage() {
     setDeleteStatus("");
     setLeaveStatus("");
     setChatStatus("");
+    setTaskStatusMsg("");
 
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
@@ -360,6 +406,20 @@ export default function EventPage() {
 
     // Chat messages for current tab
     await loadMessages(chatTab);
+
+    // Tasks
+    const t = await supabase
+      .from("event_tasks")
+      .select("id,event_id,title,description,assignee_id,visibility,status,created_by,created_at")
+      .eq("event_id", eventId)
+      .order("created_at", { ascending: false });
+
+    if (t.error) {
+      setTaskStatusMsg(`❌ ${t.error.message}`);
+      setTasks([]);
+    } else {
+      setTasks((t.data ?? []) as TaskRow[]);
+    }
 
     setLoading(false);
   }
@@ -718,13 +778,128 @@ export default function EventPage() {
     await loadMessages(chatTab);
   }
 
+  /* ================= TASKS ================= */
+
+  async function createTask() {
+    if (!me || !isCreator) return;
+    setTaskStatusMsg("");
+
+    const title = taskTitle.trim();
+    if (!title) {
+      setTaskStatusMsg("❌ Task title is required");
+      return;
+    }
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    const res = await supabase.from("event_tasks").insert({
+      event_id: eventId,
+      title,
+      description: taskDescription.trim() ? taskDescription.trim() : null,
+      assignee_id: taskAssigneeId || null,
+      visibility: taskVisibility,
+      status: taskStatus,
+      created_by: me.id,
+    });
+
+    if (res.error) {
+      setTaskStatusMsg(`❌ ${res.error.message}`);
+      return;
+    }
+
+    setTaskTitle("");
+    setTaskDescription("");
+    setTaskAssigneeId("");
+    setTaskVisibility("public");
+    setTaskStatus("todo");
+    setTaskStatusMsg("✅ Task created");
+    await loadAll();
+  }
+
+  function startTaskEdit(task: TaskRow) {
+    setEditTaskId(task.id);
+    setEditTaskTitle(task.title);
+    setEditTaskDescription(task.description ?? "");
+    setEditTaskAssigneeId(task.assignee_id ?? "");
+    setEditTaskVisibility(task.visibility);
+    setEditTaskStatus(task.status);
+    setTaskStatusMsg("");
+  }
+
+  function cancelTaskEdit() {
+    setEditTaskId(null);
+    setEditTaskTitle("");
+    setEditTaskDescription("");
+    setEditTaskAssigneeId("");
+    setEditTaskVisibility("public");
+    setEditTaskStatus("todo");
+  }
+
+  async function saveTaskEdit() {
+    if (!editTaskId || !isCreator) return;
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    const res = await supabase
+      .from("event_tasks")
+      .update({
+        title: editTaskTitle.trim(),
+        description: editTaskDescription.trim() ? editTaskDescription.trim() : null,
+        assignee_id: editTaskAssigneeId || null,
+        visibility: editTaskVisibility,
+        status: editTaskStatus,
+      })
+      .eq("id", editTaskId)
+      .eq("event_id", eventId);
+
+    if (res.error) {
+      setTaskStatusMsg(`❌ ${res.error.message}`);
+      return;
+    }
+
+    setTaskStatusMsg("✅ Task updated");
+    cancelTaskEdit();
+    await loadAll();
+  }
+
+  async function deleteTask(taskId: string) {
+    if (!isCreator) return;
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    const res = await supabase.from("event_tasks").delete().eq("id", taskId).eq("event_id", eventId);
+    if (res.error) {
+      setTaskStatusMsg(`❌ ${res.error.message}`);
+      return;
+    }
+
+    setTaskStatusMsg("✅ Task deleted");
+    await loadAll();
+  }
+
+  async function updateTaskStatus(task: TaskRow, status: TaskRow["status"]) {
+    if (!canChangeTaskStatus(task)) return;
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    const res = await supabase.from("event_tasks").update({ status }).eq("id", task.id).eq("event_id", eventId);
+    if (res.error) {
+      setTaskStatusMsg(`❌ ${res.error.message}`);
+      return;
+    }
+
+    setTaskStatusMsg("✅ Task status updated");
+    await loadAll();
+  }
+
   /* ================= UI ================= */
 
-  if (loading) return <div style={pageStyle}><Card><p>Loading…</p></Card></div>;
+  if (loading) return <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}><Card><p>Loading…</p></Card></div>;
 
   if (!event) {
     return (
-      <div style={pageStyle}>
+      <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
         <Card>
           <a href="/events" style={linkStyle}>← Back</a>
           <h2 style={{ marginTop: 10 }}>Event not found</h2>
@@ -734,12 +909,22 @@ export default function EventPage() {
     );
   }
 
+  const topLayoutStyle = isMobile ? { ...topLayout, gridTemplateColumns: "1fr" } : topLayout;
+  const twoColumnLayoutStyle = isMobile ? { ...twoColumnLayout, gridTemplateColumns: "1fr" } : twoColumnLayout;
+
   return (
-    <div style={pageStyle}>
-      <div style={{ maxWidth: 980, margin: "0 auto", color: "#e5e7eb", fontFamily: "system-ui" }}>
+    <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
+      <div
+        style={{
+          maxWidth: isMobile ? "100%" : 980,
+          margin: "0 auto",
+          color: "#e5e7eb",
+          fontFamily: "system-ui",
+        }}
+      >
         <a href="/events" style={linkStyle}>← Back to events</a>
 
-        <div style={topLayout}>
+        <div style={topLayoutStyle}>
           <Card>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <div>
@@ -747,7 +932,12 @@ export default function EventPage() {
                 <div style={{ color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
                   <b>{event.type}</b> {event.surprise_mode ? "• 🎁 surprise mode" : ""}
                 </div>
-                {event.starts_at && <div style={{ marginTop: 6 }}>🗓 {new Date(event.starts_at).toLocaleString()}</div>}
+                {event.starts_at && (
+                  <div style={{ marginTop: 6 }}>
+                    🗓 {new Date(event.starts_at).toLocaleString()}
+                    {event.ends_at ? ` — ${new Date(event.ends_at).toLocaleString()}` : ""}
+                  </div>
+                )}
                 {event.location && <div style={{ marginTop: 6 }}>📍 {event.location}</div>}
               </div>
 
@@ -789,7 +979,7 @@ export default function EventPage() {
           )}
         </div>
 
-        <div style={twoColumnLayout}>
+        <div style={twoColumnLayoutStyle}>
           <div style={columnStack}>
             {/* PEOPLE COMING */}
             <Card>
@@ -892,7 +1082,14 @@ export default function EventPage() {
                         </summary>
                         <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
                           {invites.map((inv) => (
-                            <div key={inv.id} style={rowStyle}>
+                            <div
+                              key={inv.id}
+                              style={{
+                                ...rowStyle,
+                                flexDirection: isMobile ? "column" : "row",
+                                alignItems: isMobile ? "flex-start" : "center",
+                              }}
+                            >
                               <div style={{ flex: 1 }}>
                                 <div style={{ fontWeight: 900 }}>{inv.email}</div>
                                 <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
@@ -926,6 +1123,187 @@ export default function EventPage() {
                 onReload={loadAll}
               />
             )}
+
+            {/* TASKS */}
+            <Card>
+              <h2 style={{ marginTop: 0 }}>Tasks</h2>
+
+              {isCreator && (
+                <div style={{ display: "grid", gap: 10 }}>
+                  <input
+                    placeholder="Task title"
+                    value={taskTitle}
+                    onChange={(e) => setTaskTitle(e.target.value)}
+                    style={inputStyle}
+                  />
+                  <textarea
+                    placeholder="Task description"
+                    value={taskDescription}
+                    onChange={(e) => setTaskDescription(e.target.value)}
+                    style={{ ...inputStyle, minHeight: 90, resize: "vertical" as const }}
+                  />
+                  <select
+                    value={taskAssigneeId}
+                    onChange={(e) => setTaskAssigneeId(e.target.value)}
+                    style={inputStyle}
+                  >
+                    <option value="">Assign to…</option>
+                    {members.map((m) => (
+                      <option key={m.user_id} value={m.user_id}>
+                        {displayNameByUser(m.user_id, m.full_name, null)}
+                      </option>
+                    ))}
+                  </select>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <select
+                      value={taskVisibility}
+                      onChange={(e) => setTaskVisibility(e.target.value as "public" | "secret")}
+                      style={inputStyle}
+                    >
+                      <option value="public">Public</option>
+                      <option value="secret">Secret</option>
+                    </select>
+                    <select
+                      value={taskStatus}
+                      onChange={(e) => setTaskStatus(e.target.value as "todo" | "in_progress" | "done")}
+                      style={inputStyle}
+                    >
+                      <option value="todo">To do</option>
+                      <option value="in_progress">In progress</option>
+                      <option value="done">Done</option>
+                    </select>
+                  </div>
+                  <button onClick={createTask} disabled={!taskTitle.trim()} style={primaryBtnStyle(!taskTitle.trim())}>
+                    + Add task
+                  </button>
+                </div>
+              )}
+
+              {taskStatusMsg && <div style={statusBoxStyle(taskStatusMsg.startsWith("✅"))}>{taskStatusMsg}</div>}
+
+              <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+                {tasks.filter(canViewTask).length === 0 ? (
+                  <div style={{ color: "rgba(229,231,235,0.75)" }}>No tasks yet.</div>
+                ) : (
+                  tasks.filter(canViewTask).map((task) => {
+                    const editing = editTaskId === task.id;
+                    const assignee = task.assignee_id
+                      ? members.find((m) => m.user_id === task.assignee_id)
+                      : null;
+
+                    return (
+                      <div
+                        key={task.id}
+                        style={{
+                          ...rowStyle,
+                          flexDirection: isMobile ? "column" : "row",
+                          alignItems: isMobile ? "flex-start" : "center",
+                        }}
+                      >
+                        <div style={{ flex: 1 }}>
+                          {editing ? (
+                            <div style={{ display: "grid", gap: 8 }}>
+                              <input
+                                value={editTaskTitle}
+                                onChange={(e) => setEditTaskTitle(e.target.value)}
+                                style={inputStyle}
+                              />
+                              <textarea
+                                value={editTaskDescription}
+                                onChange={(e) => setEditTaskDescription(e.target.value)}
+                                style={{ ...inputStyle, minHeight: 90, resize: "vertical" as const }}
+                              />
+                              <select
+                                value={editTaskAssigneeId}
+                                onChange={(e) => setEditTaskAssigneeId(e.target.value)}
+                                style={inputStyle}
+                              >
+                                <option value="">Assign to…</option>
+                                {members.map((m) => (
+                                  <option key={m.user_id} value={m.user_id}>
+                                    {displayNameByUser(m.user_id, m.full_name, null)}
+                                  </option>
+                                ))}
+                              </select>
+                              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                                <select
+                                  value={editTaskVisibility}
+                                  onChange={(e) => setEditTaskVisibility(e.target.value as "public" | "secret")}
+                                  style={inputStyle}
+                                >
+                                  <option value="public">Public</option>
+                                  <option value="secret">Secret</option>
+                                </select>
+                                <select
+                                  value={editTaskStatus}
+                                  onChange={(e) => setEditTaskStatus(e.target.value as "todo" | "in_progress" | "done")}
+                                  style={inputStyle}
+                                >
+                                  <option value="todo">To do</option>
+                                  <option value="in_progress">In progress</option>
+                                  <option value="done">Done</option>
+                                </select>
+                              </div>
+                              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                                <button onClick={saveTaskEdit} style={btnPrimary}>Save</button>
+                                <button onClick={cancelTaskEdit} style={btnGhost}>Cancel</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                                <b style={{ fontSize: 16 }}>{task.title}</b>
+                                <span style={pillStyle(taskStatusColor(task.status))}>
+                                  {task.status.replace("_", " ").toUpperCase()}
+                                </span>
+                                <span style={pillStyle(task.visibility === "secret" ? "#fca5a5" : "#93c5fd")}>
+                                  {task.visibility.toUpperCase()}
+                                </span>
+                              </div>
+                              {task.description && (
+                                <div style={{ marginTop: 6, color: "rgba(229,231,235,0.8)" }}>
+                                  {task.description}
+                                </div>
+                              )}
+                              <div style={{ marginTop: 6, color: "rgba(229,231,235,0.7)", fontSize: 13 }}>
+                                {assignee ? `Assigned to ${displayNameByUser(assignee.user_id, assignee.full_name, null)}` : "Unassigned"}
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        {!editing && (
+                          <div
+                            style={{
+                              ...itemActionRow,
+                              flexDirection: isMobile ? "column" : "row",
+                              alignItems: isMobile ? "stretch" : "center",
+                            }}
+                          >
+                            <select
+                              value={task.status}
+                              onChange={(e) => updateTaskStatus(task, e.target.value as TaskRow["status"])}
+                              disabled={!canChangeTaskStatus(task)}
+                              style={inputStyle}
+                            >
+                              <option value="todo">To do</option>
+                              <option value="in_progress">In progress</option>
+                              <option value="done">Done</option>
+                            </select>
+                            {canUpdateTask(task) && (
+                              <>
+                                <button onClick={() => startTaskEdit(task)} style={btnGhostSmall}>Edit</button>
+                                <button onClick={() => deleteTask(task.id)} style={btnDangerSmall}>Delete</button>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </Card>
           </div>
         </div>
 
@@ -1023,7 +1401,13 @@ export default function EventPage() {
                     </div>
 
                     {!editing && (
-                      <div style={itemActionRow}>
+                      <div
+                        style={{
+                          ...itemActionRow,
+                          flexDirection: isMobile ? "column" : "row",
+                          alignItems: isMobile ? "stretch" : "center",
+                        }}
+                      >
                         {!iClaimed ? (
                           <button onClick={() => claim(it.id)} style={smallBtnStyle}>Claim</button>
                         ) : (
@@ -1228,6 +1612,18 @@ function pillStyle(color: string): React.CSSProperties {
     color,
     background: "rgba(0,0,0,0.15)",
   };
+}
+
+function taskStatusColor(status: TaskRow["status"]) {
+  switch (status) {
+    case "done":
+      return "#34d399";
+    case "in_progress":
+      return "#fbbf24";
+    case "todo":
+    default:
+      return "#60a5fa";
+  }
 }
 
 function primaryBtnStyle(disabled: boolean): React.CSSProperties {

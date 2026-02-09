@@ -3,15 +3,18 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { useIsMobile } from "@/lib/useIsMobile";
 
 type EventType = "grill" | "birthday" | "other";
 
 export default function NewEventPage() {
   const router = useRouter();
+  const isMobile = useIsMobile();
 
   const [title, setTitle] = useState("");
   const [type, setType] = useState<EventType>("grill");
   const [startsAt, setStartsAt] = useState(""); // datetime-local
+  const [endsAt, setEndsAt] = useState("");
   const [location, setLocation] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState("");
@@ -46,12 +49,18 @@ export default function NewEventPage() {
         return;
       }
 
-      const userId = session.user.id;
+      const user = session.user;
+      const userId = user.id;
+      const fallbackName =
+        (typeof user.user_metadata?.full_name === "string" && user.user_metadata.full_name.trim()) ||
+        user.email ||
+        "Unknown user";
 
       // ✅ Ensure profile exists (required because events.creator_id references profiles.id)
       const { error: profErr } = await supabase.from("profiles").upsert({
         id: userId,
-        full_name: null,
+        full_name: fallbackName,
+        email: user.email ?? null,
         avatar_url: null,
       });
       if (profErr) throw profErr;
@@ -59,7 +68,7 @@ export default function NewEventPage() {
       const surprise_mode = type === "birthday";
 
       // ✅ Insert event
-      const { data: event, error: eventErr } = await supabase
+          const { data: event, error: eventErr } = await supabase
         .from("events")
         .insert({
           creator_id: userId,
@@ -68,6 +77,7 @@ export default function NewEventPage() {
           description: description.trim() ? description.trim() : null,
           location: location.trim() ? location.trim() : null,
           starts_at: startsAt ? new Date(startsAt).toISOString() : null,
+          ends_at: endsAt ? new Date(endsAt).toISOString() : null,
           surprise_mode,
         })
         .select("id")
@@ -99,12 +109,12 @@ export default function NewEventPage() {
       style={{
         minHeight: "100vh",
         background: "linear-gradient(180deg, #0b1020 0%, #0f172a 60%, #111827 100%)",
-        padding: 24,
+        padding: isMobile ? 16 : 24,
       }}
     >
       <div
         style={{
-          maxWidth: 720,
+          maxWidth: isMobile ? "100%" : 720,
           margin: "28px auto",
           fontFamily: "system-ui",
           color: "#e5e7eb",
@@ -152,6 +162,15 @@ export default function NewEventPage() {
                 type="datetime-local"
                 value={startsAt}
                 onChange={(e) => setStartsAt(e.target.value)}
+                style={inputStyle}
+              />
+            </Field>
+
+            <Field label="End time">
+              <input
+                type="datetime-local"
+                value={endsAt}
+                onChange={(e) => setEndsAt(e.target.value)}
                 style={inputStyle}
               />
             </Field>

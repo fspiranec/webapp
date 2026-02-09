@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { useIsMobile } from "@/lib/useIsMobile";
 
 type EventRow = {
   id: string;
@@ -15,6 +16,7 @@ type EventRow = {
 
 export default function EventsPage() {
   const router = useRouter();
+  const isMobile = useIsMobile();
   const [email, setEmail] = useState("");
   const [events, setEvents] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,8 +61,8 @@ export default function EventsPage() {
 
   if (loading) {
     return (
-      <div style={page}>
-        <Shell>
+      <div style={{ ...page, padding: isMobile ? 16 : 24 }}>
+        <Shell isMobile={isMobile}>
           <Card>
             <div style={{ color: "rgba(229,231,235,0.8)" }}>Loading…</div>
           </Card>
@@ -70,8 +72,8 @@ export default function EventsPage() {
   }
 
   return (
-    <div style={page}>
-      <Shell>
+    <div style={{ ...page, padding: isMobile ? 16 : 24 }}>
+      <Shell isMobile={isMobile}>
         <Card>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
             <div>
@@ -129,9 +131,16 @@ export default function EventsPage() {
 
 /* ================= UI HELPERS ================= */
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({ children, isMobile }: { children: React.ReactNode; isMobile: boolean }) {
   return (
-    <div style={{ maxWidth: 980, margin: "0 auto", paddingTop: 40, fontFamily: "system-ui" }}>
+    <div
+      style={{
+        maxWidth: isMobile ? "100%" : 980,
+        margin: "0 auto",
+        paddingTop: isMobile ? 20 : 40,
+        fontFamily: "system-ui",
+      }}
+    >
       {children}
     </div>
   );

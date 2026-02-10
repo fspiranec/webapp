@@ -251,9 +251,8 @@ export default function PollsCard(props: {
       <h2 style={{ marginTop: 0 }}>Polls</h2>
 
       {/* Create */}
-      {isCreator && (
-        <div style={{ display: "grid", gap: 10 }}>
-          <div style={{ fontWeight: 900 }}>Create a poll</div>
+      <div style={{ display: "grid", gap: 10 }}>
+        <div style={{ fontWeight: 900 }}>Create a poll</div>
 
           <input
             value={question}
@@ -274,11 +273,10 @@ export default function PollsCard(props: {
             placeholder={"Option 1\nOption 2\nOption 3"}
           />
 
-          <button onClick={createPoll} style={btnPrimary}>
-            + Create poll
-          </button>
-        </div>
-      )}
+        <button onClick={createPoll} style={btnPrimary}>
+          + Create poll
+        </button>
+      </div>
 
       <div style={{ marginTop: 14 }}>
         {polls.length === 0 ? (

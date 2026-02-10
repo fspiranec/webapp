@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { useIsMobile } from "@/lib/useIsMobile";
 
 type FriendRow = {
   id: string;
@@ -13,6 +14,7 @@ type FriendRow = {
 
 export default function ProfilePage() {
   const router = useRouter();
+  const isMobile = useIsMobile();
   const [email, setEmail] = useState("");
 
   const [friends, setFriends] = useState<FriendRow[]>([]);
@@ -160,8 +162,8 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div style={page}>
-        <Shell>
+      <div style={{ ...page, padding: isMobile ? 16 : 24 }}>
+        <Shell isMobile={isMobile}>
           <Card>Loading…</Card>
         </Shell>
       </div>
@@ -169,8 +171,8 @@ export default function ProfilePage() {
   }
 
   return (
-    <div style={page}>
-      <Shell>
+    <div style={{ ...page, padding: isMobile ? 16 : 24 }}>
+      <Shell isMobile={isMobile}>
         <Card>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
             <div>
@@ -274,9 +276,16 @@ export default function ProfilePage() {
 
 /* UI */
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({ children, isMobile }: { children: React.ReactNode; isMobile: boolean }) {
   return (
-    <div style={{ maxWidth: 980, margin: "0 auto", paddingTop: 40, fontFamily: "system-ui" }}>
+    <div
+      style={{
+        maxWidth: isMobile ? "100%" : 980,
+        margin: "0 auto",
+        paddingTop: isMobile ? 20 : 40,
+        fontFamily: "system-ui",
+      }}
+    >
       {children}
     </div>
   );

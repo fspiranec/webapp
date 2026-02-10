@@ -106,16 +106,38 @@ export default function PollsCard(props: {
 
     setStatus("Creating…");
 
-    const p = await supabase
-      .from("event_polls")
-      .insert({
-        event_id: eventId,
-        question: q,
-        mode,
-        created_by: meId,
-      })
-      .select("id")
-      .single();
+    const basePayload = {
+      event_id: eventId,
+      question: q,
+      created_by: meId,
+    };
+
+    const payloads: Array<Record<string, unknown>> = [
+      { ...basePayload, mode },
+      { ...basePayload, mode: mode === "multi" ? "multiple_choice" : "single_choice" },
+      { ...basePayload, allow_multiple: mode === "multi" },
+      basePayload,
+    ];
+
+    let p: { data: { id: string } | null; error: { message: string } | null } = {
+      data: null,
+      error: null,
+    };
+
+    for (let i = 0; i < payloads.length; i += 1) {
+      p = await supabase.from("event_polls").insert(payloads[i]).select("id").single();
+
+      if (!p.error || !p.error.message) break;
+
+      const msg = p.error.message.toLowerCase();
+      const schemaMismatch =
+        msg.includes("column") ||
+        msg.includes("schema cache") ||
+        msg.includes("invalid input value") ||
+        msg.includes("violates check constraint");
+
+      if (!schemaMismatch || i === payloads.length - 1) break;
+    }
 
     if (p.error || !p.data?.id) {
       setStatus(`❌ ${p.error?.message ?? "Failed to create poll"}`);

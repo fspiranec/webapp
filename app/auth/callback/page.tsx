@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 export default function AuthCallbackPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextPath = searchParams.get("next") || "/events";
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -25,12 +27,12 @@ export default function AuthCallbackPage() {
           full_name: fallbackName,
           email: user.email ?? null,
         });
-        router.replace("/events");
+        router.replace(nextPath);
       } else {
         router.replace("/login");
       }
     })();
-  }, [router]);
+  }, [router, nextPath]);
 
   return <p style={{ padding: 24, fontFamily: "system-ui" }}>Signing you in...</p>;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useIsMobile } from "@/lib/useIsMobile";
 
@@ -9,6 +9,8 @@ export default function LoginPage() {
   const router = useRouter();
   const supabase = getSupabaseBrowserClient();
   const isMobile = useIsMobile();
+  const searchParams = useSearchParams();
+  const nextPath = searchParams.get("next") || "/events";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -30,7 +32,7 @@ export default function LoginPage() {
     if (res.error) return setStatus(`❌ ${res.error.message}`);
 
     setStatus("✅ Signed in");
-    router.push("/events");
+    router.push(nextPath);
   }
 
   async function loginWithGoogle() {
@@ -41,7 +43,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`,
       },
     });
 

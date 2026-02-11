@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useIsMobile } from "@/lib/useIsMobile";
 
@@ -9,6 +9,8 @@ export default function RegisterPage() {
   const router = useRouter();
   const supabase = getSupabaseBrowserClient();
   const isMobile = useIsMobile();
+  const searchParams = useSearchParams();
+  const nextPath = searchParams.get("next") || "/events";
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -76,7 +78,7 @@ export default function RegisterPage() {
     }
 
     setStatus("✅ Registered! Redirecting…");
-    router.push("/events");
+    router.push(nextPath);
   }
 
   return (

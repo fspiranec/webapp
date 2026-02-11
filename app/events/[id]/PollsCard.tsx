@@ -154,13 +154,19 @@ export default function PollsCard(props: {
       return;
     }
 
-    await supabase.from("event_poll_options").insert(
+    const optionsInsert = await supabase.from("event_poll_options").insert(
       lines.map((label) => ({ poll_id: p.data.id, label }))
     );
+
+    if (optionsInsert.error) {
+      setStatus(`❌ ${optionsInsert.error.message}`);
+      return;
+    }
 
     setQuestion("");
     setRawOptions("Option 1\nOption 2");
     setMode("single");
+    setStatus("✅ Poll created");
     await onReload();
   }
 
@@ -209,6 +215,35 @@ export default function PollsCard(props: {
   return (
     <div style={card}>
       <h2>Polls</h2>
+
+      {isCreator && (
+        <div style={{ ...pollBox, marginBottom: 12 }}>
+          <div style={{ fontWeight: 900, marginBottom: 8 }}>Create new poll</div>
+          <div style={{ display: "grid", gap: 8 }}>
+            <input
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              placeholder="Question"
+              style={inputStyle}
+            />
+
+            <select value={mode} onChange={(e) => setMode(e.target.value as "single" | "multi")} style={inputStyle}>
+              <option value="single">Single choice</option>
+              <option value="multi">Multiple choice</option>
+            </select>
+
+            <textarea
+              value={rawOptions}
+              onChange={(e) => setRawOptions(e.target.value)}
+              placeholder="One option per line"
+              style={{ ...inputStyle, minHeight: 90, resize: "vertical" }}
+            />
+
+            <button onClick={createPoll} style={createBtn}>Create poll</button>
+            {status && <div style={{ color: status.startsWith("✅") ? "#86efac" : "#fca5a5", fontSize: 13 }}>{status}</div>}
+          </div>
+        </div>
+      )}
 
       <div style={{ display: "grid", gap: 12 }}>
         {polls.map((p) => {
@@ -289,5 +324,25 @@ const optBtn: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.12)",
   background: "rgba(255,255,255,0.05)",
   color: "#e5e7eb",
+  cursor: "pointer",
+};
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(17,24,39,0.65)",
+  color: "#e5e7eb",
+  outline: "none",
+};
+
+const createBtn: React.CSSProperties = {
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "linear-gradient(90deg,#60a5fa,#a78bfa)",
+  color: "#0b1020",
+  fontWeight: 900,
   cursor: "pointer",
 };

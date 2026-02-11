@@ -1249,6 +1249,7 @@ export default function EventPage() {
                 eventId={eventId}
                 meId={me.id}
                 isCreator={!!isCreator}
+                eventMemberCount={members.length}
                 polls={polls}
                 options={pollOptions}
                 votes={pollVotes}

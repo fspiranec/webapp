@@ -24,24 +24,27 @@ export default function JoinByLinkPage() {
 
     (async () => {
       const { data: sess } = await supabase.auth.getSession();
-      if (!sess.session) {
+      const user = sess.session?.user;
+      if (!user) {
         router.replace(`/login?next=${encodeURIComponent(`/join/${eventId}`)}`);
         return;
       }
 
-      const ev = await supabase
-        .from("events")
-        .select("id,title,type")
-        .eq("id", eventId)
-        .single();
+      await supabase.rpc("touch_join_invite", { eid: eventId });
 
-      if (ev.error || !ev.data) {
-        setStatus(`❌ ${ev.error?.message ?? "Event not found"}`);
-        return;
+      const details = await supabase.rpc("get_join_event_details", { eid: eventId });
+
+      if (details.error) {
+        setStatus("⚠️ We couldn't load event details yet. You can still join.");
+      } else {
+        const row = (details.data ?? [])[0] as EventRow | undefined;
+        if (row) {
+          setEvent(row);
+          setStatus("");
+        } else {
+          setStatus("⚠️ Event details unavailable. You can still join.");
+        }
       }
-
-      setEvent(ev.data as EventRow);
-      setStatus("");
     })();
   }, [eventId, router]);
 
@@ -53,18 +56,17 @@ export default function JoinByLinkPage() {
     setStatus("");
 
     const { data: sess } = await supabase.auth.getSession();
-    const userId = sess.session?.user.id;
+    const user = sess.session?.user;
+    const userId = user?.id;
     if (!userId) {
       router.replace(`/login?next=${encodeURIComponent(`/join/${eventId}`)}`);
       return;
     }
 
-    const res = await supabase
-      .from("event_members")
-      .upsert({ event_id: eventId, user_id: userId }, { onConflict: "event_id,user_id" });
+    const joinRes = await supabase.rpc("join_event_via_link", { eid: eventId });
 
-    if (res.error) {
-      setStatus(`❌ ${res.error.message}`);
+    if (joinRes.error) {
+      setStatus(`❌ ${joinRes.error.message}`);
       setJoining(false);
       return;
     }
@@ -88,7 +90,12 @@ export default function JoinByLinkPage() {
             </button>
           </>
         ) : (
-          <div style={{ color: "rgba(229,231,235,0.85)" }}>{status}</div>
+          <>
+            <div style={{ color: "rgba(229,231,235,0.85)", marginBottom: 14 }}>{status}</div>
+            <button onClick={joinNow} style={btnPrimary} disabled={joining}>
+              {joining ? "Joining…" : "Join now"}
+            </button>
+          </>
         )}
 
         {status && event ? (

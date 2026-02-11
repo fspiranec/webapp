@@ -740,13 +740,13 @@ export default function EventPage() {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
 
-    const res = await supabase.from("event_invites").delete().eq("id", inviteId).eq("event_id", eventId);
+    const res = await supabase.rpc("creator_uninvite", { eid: eventId, invite_id: inviteId });
     if (res.error) {
       setInviteStatus(`❌ ${res.error.message}`);
       return;
     }
 
-    setInviteStatus("✅ Uninvited");
+    setInviteStatus("✅ Uninvited and removed from event");
     await loadAll({ background: true });
   }
 
@@ -758,14 +758,14 @@ export default function EventPage() {
     if (!supabase) return;
 
     setLeaveStatus("Leaving…");
-    const res = await supabase.rpc("leave_event", { eid: eventId });
+    const res = await supabase.rpc("leave_event_keep_invite", { eid: eventId });
     if (res.error) {
       setLeaveStatus(`❌ ${res.error.message}`);
       return;
     }
 
-    setLeaveStatus("✅ Left event (claims released)");
-    router.push("/events");
+    setLeaveStatus("✅ Left event. Invite kept so you can rejoin from Invites.");
+    router.push("/invites");
   }
 
   /* ================= DELETE EVENT (creator + password required) ================= */

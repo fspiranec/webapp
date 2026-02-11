@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useIsMobile } from "@/lib/useIsMobile";
 
@@ -9,13 +9,16 @@ export default function LoginPage() {
   const router = useRouter();
   const supabase = getSupabaseBrowserClient();
   const isMobile = useIsMobile();
-  const searchParams = useSearchParams();
-  const nextPath = searchParams.get("next") || "/events";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   const [status, setStatus] = useState("");
+
+  function getNextPath() {
+    if (typeof window === "undefined") return "/events";
+    return new URLSearchParams(window.location.search).get("next") || "/events";
+  }
 
   async function login() {
     setStatus("");
@@ -32,7 +35,7 @@ export default function LoginPage() {
     if (res.error) return setStatus(`❌ ${res.error.message}`);
 
     setStatus("✅ Signed in");
-    router.push(nextPath);
+    router.push(getNextPath());
   }
 
   async function loginWithGoogle() {
@@ -43,7 +46,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`,
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(getNextPath())}`,
       },
     });
 
@@ -88,7 +91,7 @@ export default function LoginPage() {
             Continue with Google
           </button>
 
-          <button onClick={() => router.push("/register")} style={btnGhost}>
+          <button onClick={() => router.push(`/register?next=${encodeURIComponent(getNextPath())}`)} style={btnGhost}>
             New user? Create account
           </button>
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useIsMobile } from "@/lib/useIsMobile";
 
@@ -9,8 +9,6 @@ export default function RegisterPage() {
   const router = useRouter();
   const supabase = getSupabaseBrowserClient();
   const isMobile = useIsMobile();
-  const searchParams = useSearchParams();
-  const nextPath = searchParams.get("next") || "/events";
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -20,6 +18,11 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
 
   const [status, setStatus] = useState("");
+
+  function getNextPath() {
+    if (typeof window === "undefined") return "/events";
+    return new URLSearchParams(window.location.search).get("next") || "/events";
+  }
 
   async function register() {
     setStatus("");
@@ -78,7 +81,7 @@ export default function RegisterPage() {
     }
 
     setStatus("✅ Registered! Redirecting…");
-    router.push(nextPath);
+    router.push(getNextPath());
   }
 
   return (
@@ -137,7 +140,7 @@ export default function RegisterPage() {
             Create account
           </button>
 
-          <button onClick={() => router.push("/login")} style={btnGhost}>
+          <button onClick={() => router.push(`/login?next=${encodeURIComponent(getNextPath())}`)} style={btnGhost}>
             Back to login
           </button>
 

@@ -78,6 +78,8 @@ type MemberRow = {
   user_id: string;
   full_name: string | null;
   email: string | null;
+  first_name: string | null;
+  last_name: string | null;
 };
 
 type MsgRow = {

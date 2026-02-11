@@ -21,6 +21,7 @@ export default function EventsPage() {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [pendingInvites, setPendingInvites] = useState(0);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -34,6 +35,13 @@ export default function EventsPage() {
       }
       const user = sess.session.user;
       setEmail(user.email ?? "");
+
+      const invitesCount = await supabase
+        .from("event_invites")
+        .select("id", { count: "exact", head: true })
+        .eq("accepted", false)
+        .eq("email", (user.email ?? "").toLowerCase());
+      setPendingInvites(invitesCount.count ?? 0);
 
       const { data, error } = await supabase
         .from("event_members")
@@ -50,6 +58,25 @@ export default function EventsPage() {
 
       setLoading(false);
     })();
+
+    const invitesChannel = supabase
+      .channel("events-page-invites")
+      .on("postgres_changes", { event: "*", schema: "public", table: "event_invites" }, async () => {
+        const { data: sess2 } = await supabase.auth.getSession();
+        const em = sess2.session?.user.email?.toLowerCase();
+        if (!em) return;
+        const countRes = await supabase
+          .from("event_invites")
+          .select("id", { count: "exact", head: true })
+          .eq("accepted", false)
+          .eq("email", em);
+        setPendingInvites(countRes.count ?? 0);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(invitesChannel);
+    };
   }, [router]);
 
   async function signOut() {
@@ -89,7 +116,7 @@ export default function EventsPage() {
               </button>
 
               <button style={btnGhost} onClick={() => router.push("/invites")}>
-                Invites
+                Invites{pendingInvites > 0 ? ` (${pendingInvites}) 🔔` : ""}
               </button>
 
               <button style={btnGhost} onClick={() => router.push("/profile")}>

@@ -10,6 +10,12 @@ type EventRow = {
   type: string;
 };
 
+type InviteLookupRow = {
+  id: string;
+  accepted: boolean;
+  events: EventRow | null;
+};
+
 export default function JoinByLinkPage() {
   const { eventId } = useParams<{ eventId: string }>();
   const router = useRouter();
@@ -24,9 +30,39 @@ export default function JoinByLinkPage() {
 
     (async () => {
       const { data: sess } = await supabase.auth.getSession();
-      if (!sess.session) {
+      const user = sess.session?.user;
+      if (!user) {
         router.replace(`/login?next=${encodeURIComponent(`/join/${eventId}`)}`);
         return;
+      }
+
+      const email = (user.email ?? "").trim().toLowerCase();
+
+      if (email) {
+        const inv = await supabase
+          .from("event_invites")
+          .select("id,accepted,events:events(id,title,type)")
+          .eq("event_id", eventId)
+          .eq("email", email)
+          .limit(1);
+
+        if (!inv.error) {
+          const row = (inv.data ?? [])[0] as InviteLookupRow | undefined;
+          if (row?.events) {
+            setEvent(row.events);
+            setStatus("");
+            return;
+          }
+
+          if (!row) {
+            await supabase.from("event_invites").insert({
+              event_id: eventId,
+              email,
+              accepted: false,
+              invited_by: user.id,
+            });
+          }
+        }
       }
 
       const ev = await supabase
@@ -36,16 +72,14 @@ export default function JoinByLinkPage() {
         .limit(1);
 
       if (ev.error) {
-        // Keep the flow usable even if event read is blocked by RLS for brand-new users.
-        // Joining itself is attempted via event_members upsert below.
-        setStatus("⚠️ We couldn't load event details yet. You can still try joining.");
+        setStatus("⚠️ We couldn't load event details yet. You can still join.");
       } else {
         const row = (ev.data ?? [])[0] as EventRow | undefined;
         if (row) {
           setEvent(row);
           setStatus("");
         } else {
-          setStatus("⚠️ Event details unavailable. You can still try joining.");
+          setStatus("⚠️ Event details unavailable. You can still join.");
         }
       }
     })();
@@ -59,20 +93,41 @@ export default function JoinByLinkPage() {
     setStatus("");
 
     const { data: sess } = await supabase.auth.getSession();
-    const userId = sess.session?.user.id;
+    const user = sess.session?.user;
+    const userId = user?.id;
+    const email = (user?.email ?? "").trim().toLowerCase();
+
     if (!userId) {
       router.replace(`/login?next=${encodeURIComponent(`/join/${eventId}`)}`);
       return;
     }
 
-    const res = await supabase
+    const memberRes = await supabase
       .from("event_members")
       .upsert({ event_id: eventId, user_id: userId }, { onConflict: "event_id,user_id" });
 
-    if (res.error) {
-      setStatus(`❌ ${res.error.message}`);
+    if (memberRes.error) {
+      setStatus(`❌ ${memberRes.error.message}`);
       setJoining(false);
       return;
+    }
+
+    if (email) {
+      const markAccepted = await supabase
+        .from("event_invites")
+        .update({ accepted: true })
+        .eq("event_id", eventId)
+        .eq("email", email);
+
+      if (markAccepted.error) {
+        // fallback for users joining from a raw link without a pre-created invite row
+        await supabase.from("event_invites").insert({
+          event_id: eventId,
+          email,
+          accepted: true,
+          invited_by: userId,
+        });
+      }
     }
 
     setStatus("✅ Joined! Redirecting…");

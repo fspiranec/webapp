@@ -13,7 +13,7 @@ type EventRow = {
 type InviteLookupRow = {
   id: string;
   accepted: boolean;
-  events: EventRow | null;
+  events: EventRow[] | null;
 };
 
 export default function JoinByLinkPage() {
@@ -48,8 +48,9 @@ export default function JoinByLinkPage() {
 
         if (!inv.error) {
           const row = (inv.data ?? [])[0] as InviteLookupRow | undefined;
-          if (row?.events) {
-            setEvent(row.events);
+          const invitedEvent = row?.events?.[0];
+          if (invitedEvent) {
+            setEvent(invitedEvent);
             setStatus("");
             return;
           }

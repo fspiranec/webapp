@@ -500,15 +500,62 @@ export default function EventPage() {
       )
       .on(
         "postgres_changes",
+        { event: "*", schema: "public", table: "event_items", filter: `event_id=eq.${eventId}` },
+        () => {
+          loadAll({ background: true });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "event_tasks", filter: `event_id=eq.${eventId}` },
+        () => {
+          loadAll({ background: true });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "event_polls", filter: `event_id=eq.${eventId}` },
+        () => {
+          loadAll({ background: true });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "event_poll_options" },
+        () => {
+          loadAll({ background: true });
+        }
+      )
+      .on(
+        "postgres_changes",
         { event: "*", schema: "public", table: "event_poll_votes", filter: `event_id=eq.${eventId}` },
         () => {
           loadAll({ background: true });
         }
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "event_messages", filter: `event_id=eq.${eventId}` },
+        () => {
+          loadMessages(chatTab);
+        }
+      )
       .subscribe();
 
     const inviteChannel = supabase
-      .channel(`my-invites-${eventId}`)
+      .channel(`event-invites-${eventId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "event_invites",
+          filter: `event_id=eq.${eventId}`,
+        },
+        () => {
+          loadAll({ background: true });
+        }
+      )
       .on(
         "postgres_changes",
         {
@@ -523,11 +570,16 @@ export default function EventPage() {
       )
       .subscribe();
 
+    const fallbackPoll = window.setInterval(() => {
+      loadAll({ background: true });
+    }, 20000);
+
     return () => {
+      window.clearInterval(fallbackPoll);
       supabase.removeChannel(eventChannel);
       supabase.removeChannel(inviteChannel);
     };
-  }, [eventId, me?.email]);
+  }, [eventId, me?.email, chatTab]);
 
   /* ================= ACTIONS: ITEMS ================= */
 

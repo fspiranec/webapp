@@ -19,6 +19,11 @@ export default function RegisterPage() {
 
   const [status, setStatus] = useState("");
 
+  function getNextPath() {
+    if (typeof window === "undefined") return "/events";
+    return new URLSearchParams(window.location.search).get("next") || "/events";
+  }
+
   async function register() {
     setStatus("");
 
@@ -76,7 +81,7 @@ export default function RegisterPage() {
     }
 
     setStatus("✅ Registered! Redirecting…");
-    router.push("/events");
+    router.push(getNextPath());
   }
 
   return (
@@ -135,7 +140,7 @@ export default function RegisterPage() {
             Create account
           </button>
 
-          <button onClick={() => router.push("/login")} style={btnGhost}>
+          <button onClick={() => router.push(`/login?next=${encodeURIComponent(getNextPath())}`)} style={btnGhost}>
             Back to login
           </button>
 

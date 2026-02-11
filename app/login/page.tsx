@@ -15,6 +15,11 @@ export default function LoginPage() {
 
   const [status, setStatus] = useState("");
 
+  function getNextPath() {
+    if (typeof window === "undefined") return "/events";
+    return new URLSearchParams(window.location.search).get("next") || "/events";
+  }
+
   async function login() {
     setStatus("");
     const cleanEmail = email.trim().toLowerCase();
@@ -30,7 +35,7 @@ export default function LoginPage() {
     if (res.error) return setStatus(`❌ ${res.error.message}`);
 
     setStatus("✅ Signed in");
-    router.push("/events");
+    router.push(getNextPath());
   }
 
   async function loginWithGoogle() {
@@ -41,7 +46,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(getNextPath())}`,
       },
     });
 
@@ -86,7 +91,7 @@ export default function LoginPage() {
             Continue with Google
           </button>
 
-          <button onClick={() => router.push("/register")} style={btnGhost}>
+          <button onClick={() => router.push(`/register?next=${encodeURIComponent(getNextPath())}`)} style={btnGhost}>
             New user? Create account
           </button>
 

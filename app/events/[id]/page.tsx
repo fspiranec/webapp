@@ -63,6 +63,7 @@ type ClaimRow = {
 
 type InviteRow = {
   id: string;
+  event_id?: string;
   email: string;
   accepted: boolean;
   created_at: string;
@@ -141,6 +142,7 @@ export default function EventPage() {
   // Invites
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteStatus, setInviteStatus] = useState("");
+  const [pendingMyInvites, setPendingMyInvites] = useState(0);
 
   // Multi-invite selection
   const [selectedFriendIds, setSelectedFriendIds] = useState<Record<string, boolean>>({});
@@ -178,6 +180,7 @@ export default function EventPage() {
   const isCreator = me?.id === event?.creator_id;
   const hideClaims = !!event?.surprise_mode && !!isCreator;
   const isBirthday = event?.type === "birthday";
+  const inviteLink = typeof window !== "undefined" ? `${window.location.origin}/join/${eventId}` : `/join/${eventId}`;
 
   function canViewTask(task: TaskRow) {
     if (task.visibility === "public") return true;
@@ -232,8 +235,8 @@ export default function EventPage() {
 
   /* ================= LOAD ALL ================= */
 
-  async function loadAll() {
-    setLoading(true);
+  async function loadAll(opts?: { background?: boolean }) {
+    if (!opts?.background) setLoading(true);
     setStatus("");
     setInviteStatus("");
     setBulkStatus("");
@@ -319,11 +322,18 @@ export default function EventPage() {
     // Invites
     const inv = await supabase
       .from("event_invites")
-      .select("id,email,accepted,created_at")
+      .select("id,event_id,email,accepted,created_at")
       .eq("event_id", eventId)
       .order("created_at", { ascending: false });
 
     setInvites((inv.data ?? []) as InviteRow[]);
+
+    const myInv = await supabase
+      .from("event_invites")
+      .select("id", { count: "exact", head: true })
+      .eq("accepted", false)
+      .eq("email", (user.email ?? "").toLowerCase());
+    setPendingMyInvites(myInv.count ?? 0);
 
     // Friends
     const fr = await supabase
@@ -421,7 +431,7 @@ export default function EventPage() {
       setTasks((t.data ?? []) as TaskRow[]);
     }
 
-    setLoading(false);
+    if (!opts?.background) setLoading(false);
   }
 
   async function loadMessages(tab: "general" | "secret") {
@@ -468,6 +478,57 @@ export default function EventPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
 
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase || !me?.email) return;
+
+    const eventChannel = supabase
+      .channel(`event-live-${eventId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "event_members", filter: `event_id=eq.${eventId}` },
+        () => {
+          loadAll({ background: true });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "item_claims", filter: `event_id=eq.${eventId}` },
+        () => {
+          loadAll({ background: true });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "event_poll_votes", filter: `event_id=eq.${eventId}` },
+        () => {
+          loadAll({ background: true });
+        }
+      )
+      .subscribe();
+
+    const inviteChannel = supabase
+      .channel(`my-invites-${eventId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "event_invites",
+          filter: `email=eq.${me.email.toLowerCase()}`,
+        },
+        () => {
+          loadAll({ background: true });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(eventChannel);
+      supabase.removeChannel(inviteChannel);
+    };
+  }, [eventId, me?.email]);
+
   /* ================= ACTIONS: ITEMS ================= */
 
   async function addItem() {
@@ -495,7 +556,7 @@ export default function EventPage() {
     setNewItemNotes("");
     setNewItemMode("single");
     setStatus("✅ Item added");
-    await loadAll();
+    await loadAll({ background: true });
   }
 
   function startEdit(it: ItemRow) {
@@ -535,7 +596,7 @@ export default function EventPage() {
 
     setStatus("✅ Item updated");
     cancelEdit();
-    await loadAll();
+    await loadAll({ background: true });
   }
 
   async function deleteItem(itemId: string) {
@@ -549,7 +610,7 @@ export default function EventPage() {
     }
 
     setStatus("✅ Item deleted");
-    await loadAll();
+    await loadAll({ background: true });
   }
 
   async function claim(itemId: string) {
@@ -569,7 +630,7 @@ export default function EventPage() {
     }
 
     setStatus("✅ Claimed");
-    await loadAll();
+    await loadAll({ background: true });
   }
 
   async function unclaim(itemId: string) {
@@ -590,7 +651,7 @@ export default function EventPage() {
     }
 
     setStatus("✅ Unclaimed");
-    await loadAll();
+    await loadAll({ background: true });
   }
 
   /* ================= ACTIONS: INVITES ================= */
@@ -641,7 +702,7 @@ export default function EventPage() {
 
     setInviteEmail("");
     setInviteStatus("✅ Invite created");
-    await loadAll();
+    await loadAll({ background: true });
   }
 
   async function inviteSelectedFriends() {
@@ -671,7 +732,7 @@ export default function EventPage() {
       setBulkStatus(`⚠️ Invited ${okMsgs.length}, failed ${badMsgs.length}: ${badMsgs.join(" | ")}`);
     }
 
-    await loadAll();
+    await loadAll({ background: true });
   }
 
   async function uninvite(inviteId: string) {
@@ -686,7 +747,7 @@ export default function EventPage() {
     }
 
     setInviteStatus("✅ Uninvited");
-    await loadAll();
+    await loadAll({ background: true });
   }
 
   /* ================= LEAVE EVENT ================= */
@@ -814,7 +875,7 @@ export default function EventPage() {
     setTaskVisibility("public");
     setTaskStatus("todo");
     setTaskStatusMsg("✅ Task created");
-    await loadAll();
+    await loadAll({ background: true });
   }
 
   function startTaskEdit(task: TaskRow) {
@@ -860,7 +921,7 @@ export default function EventPage() {
 
     setTaskStatusMsg("✅ Task updated");
     cancelTaskEdit();
-    await loadAll();
+    await loadAll({ background: true });
   }
 
   async function deleteTask(taskId: string) {
@@ -890,7 +951,7 @@ export default function EventPage() {
     }
 
     setTaskStatusMsg("✅ Task status updated");
-    await loadAll();
+    await loadAll({ background: true });
   }
 
   /* ================= UI ================= */
@@ -945,7 +1006,7 @@ export default function EventPage() {
                 {me?.email ? <>Signed in as <b>{me.email}</b></> : null}
                 <div style={{ marginTop: 6 }}>
                   <a href="/profile" style={navLink}>Profile</a>{" "}
-                  <a href="/invites" style={navLink}>Invites</a>
+                  <a href="/invites" style={navLink}>Invites{pendingMyInvites > 0 ? ` (${pendingMyInvites}) 🔔` : ""}</a>
                 </div>
                 {isCreator && (
                   <div style={{ marginTop: 10 }}>
@@ -1018,6 +1079,25 @@ export default function EventPage() {
               {isCreator && (
                 <div style={{ marginTop: 16 }}>
                   <h3 style={{ margin: 0 }}>Invites</h3>
+
+                  <div style={{ marginTop: 10, marginBottom: 14 }}>
+                    <div style={{ fontWeight: 900, marginBottom: 8 }}>Invitation link</div>
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                      <input value={inviteLink} readOnly style={inputStyle} />
+                      <button
+                        onClick={async () => {
+                          await navigator.clipboard.writeText(inviteLink);
+                          setInviteStatus("✅ Invitation link copied");
+                        }}
+                        style={btnGhost}
+                      >
+                        Copy link
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 12, color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
+                      People with this link can sign in/sign up and join this event instantly.
+                    </div>
+                  </div>
 
                   <div style={{ marginTop: 10 }}>
                     <div style={{ fontWeight: 900, marginBottom: 8 }}>Invite multiple friends</div>

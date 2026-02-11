@@ -12,6 +12,8 @@ export default function AuthCallbackPage() {
     if (!supabase) return;
 
     (async () => {
+      const nextPath = new URLSearchParams(window.location.search).get("next") || "/events";
+
       const { data } = await supabase.auth.getUser();
       const user = data.user;
 
@@ -25,7 +27,7 @@ export default function AuthCallbackPage() {
           full_name: fallbackName,
           email: user.email ?? null,
         });
-        router.replace("/events");
+        router.replace(nextPath);
       } else {
         router.replace("/login");
       }

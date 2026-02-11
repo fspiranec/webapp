@@ -38,12 +38,13 @@ export default function PollsCard(props: {
   eventId: string;
   meId: string;
   isCreator: boolean;
+  eventMemberCount: number;
   polls: PollRow[];
   options: PollOptionRow[];
   votes: PollVoteRow[];
   onReload: () => Promise<void>;
 }) {
-  const { eventId, meId, isCreator, polls, options, votes, onReload } = props;
+  const { eventId, meId, isCreator, eventMemberCount, polls, options, votes, onReload } = props;
 
   const [question, setQuestion] = useState("");
   const [mode, setMode] = useState<"single" | "multi">("single");
@@ -249,10 +250,14 @@ export default function PollsCard(props: {
         {polls.map((p) => {
           const opts = optionsByPoll.get(p.id) ?? [];
           const mySet = myVotesByPoll.get(p.id) ?? new Set<string>();
+          const votedPeopleCount = new Set((votesByPoll.get(p.id) ?? []).map((v) => v.user_id)).size;
 
           return (
             <div key={p.id} style={pollBox}>
               <div style={{ fontWeight: 900 }}>{p.question}</div>
+              <div style={{ fontSize: 13, opacity: 0.8, marginTop: 4 }}>
+                {votedPeopleCount}/{eventMemberCount} people voted
+              </div>
 
               <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
                 {opts.map((o) => {

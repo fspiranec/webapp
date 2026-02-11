@@ -995,7 +995,7 @@ export default function EventPage() {
                         <div key={m.user_id} style={rowStyle}>
                           <div style={{ flex: 1 }}>
                             <div style={{ fontWeight: 900 }}>
-                              {displayNameByUser(m.user_id, m.first_name,m.last_name null)}
+                              {displayNameByUser(m.user_id, m.first_name, m.last_name, null)}
                               {m.user_id === event.creator_id ? " (creator)" : ""}
                               {m.user_id === me?.id ? " (you)" : ""}
                             </div>

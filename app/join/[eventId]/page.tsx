@@ -10,12 +10,6 @@ type EventRow = {
   type: string;
 };
 
-type InviteLookupRow = {
-  id: string;
-  accepted: boolean;
-  events: EventRow[] | null;
-};
-
 export default function JoinByLinkPage() {
   const { eventId } = useParams<{ eventId: string }>();
   const router = useRouter();
@@ -36,46 +30,14 @@ export default function JoinByLinkPage() {
         return;
       }
 
-      const email = (user.email ?? "").trim().toLowerCase();
+      await supabase.rpc("touch_join_invite", { eid: eventId });
 
-      if (email) {
-        const inv = await supabase
-          .from("event_invites")
-          .select("id,accepted,events:events(id,title,type)")
-          .eq("event_id", eventId)
-          .eq("email", email)
-          .limit(1);
+      const details = await supabase.rpc("get_join_event_details", { eid: eventId });
 
-        if (!inv.error) {
-          const row = (inv.data ?? [])[0] as InviteLookupRow | undefined;
-          const invitedEvent = row?.events?.[0];
-          if (invitedEvent) {
-            setEvent(invitedEvent);
-            setStatus("");
-            return;
-          }
-
-          if (!row) {
-            await supabase.from("event_invites").insert({
-              event_id: eventId,
-              email,
-              accepted: false,
-              invited_by: user.id,
-            });
-          }
-        }
-      }
-
-      const ev = await supabase
-        .from("events")
-        .select("id,title,type")
-        .eq("id", eventId)
-        .limit(1);
-
-      if (ev.error) {
+      if (details.error) {
         setStatus("⚠️ We couldn't load event details yet. You can still join.");
       } else {
-        const row = (ev.data ?? [])[0] as EventRow | undefined;
+        const row = (details.data ?? [])[0] as EventRow | undefined;
         if (row) {
           setEvent(row);
           setStatus("");
@@ -96,39 +58,17 @@ export default function JoinByLinkPage() {
     const { data: sess } = await supabase.auth.getSession();
     const user = sess.session?.user;
     const userId = user?.id;
-    const email = (user?.email ?? "").trim().toLowerCase();
-
     if (!userId) {
       router.replace(`/login?next=${encodeURIComponent(`/join/${eventId}`)}`);
       return;
     }
 
-    const memberRes = await supabase
-      .from("event_members")
-      .upsert({ event_id: eventId, user_id: userId }, { onConflict: "event_id,user_id" });
+    const joinRes = await supabase.rpc("join_event_via_link", { eid: eventId });
 
-    if (memberRes.error) {
-      setStatus(`❌ ${memberRes.error.message}`);
+    if (joinRes.error) {
+      setStatus(`❌ ${joinRes.error.message}`);
       setJoining(false);
       return;
-    }
-
-    if (email) {
-      const markAccepted = await supabase
-        .from("event_invites")
-        .update({ accepted: true })
-        .eq("event_id", eventId)
-        .eq("email", email);
-
-      if (markAccepted.error) {
-        // fallback for users joining from a raw link without a pre-created invite row
-        await supabase.from("event_invites").insert({
-          event_id: eventId,
-          email,
-          accepted: true,
-          invited_by: userId,
-        });
-      }
     }
 
     setStatus("✅ Joined! Redirecting…");

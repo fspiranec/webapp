@@ -755,43 +755,13 @@ export default function EventPage() {
   async function leaveEvent() {
     setLeaveStatus("");
     const supabase = getSupabaseBrowserClient();
-    if (!supabase || !me?.email) return;
+    if (!supabase) return;
 
     setLeaveStatus("Leaving…");
-    const res = await supabase.rpc("leave_event", { eid: eventId });
+    const res = await supabase.rpc("leave_event_keep_invite", { eid: eventId });
     if (res.error) {
       setLeaveStatus(`❌ ${res.error.message}`);
       return;
-    }
-
-    const email = me.email.trim().toLowerCase();
-
-    const inviteUpdate = await supabase
-      .from("event_invites")
-      .update({ accepted: false })
-      .select("id")
-      .eq("event_id", eventId)
-      .eq("email", email);
-
-    if (inviteUpdate.error) {
-      setLeaveStatus(`⚠️ Left event, but invite refresh failed: ${inviteUpdate.error.message}`);
-      router.push("/invites");
-      return;
-    }
-
-    if ((inviteUpdate.data ?? []).length === 0) {
-      const addBackInvite = await supabase.from("event_invites").insert({
-        event_id: eventId,
-        email,
-        accepted: false,
-        invited_by: event?.creator_id ?? me.id,
-      });
-
-      if (addBackInvite.error) {
-        setLeaveStatus(`⚠️ Left event, but could not re-create invite: ${addBackInvite.error.message}`);
-        router.push("/invites");
-        return;
-      }
     }
 
     setLeaveStatus("✅ Left event. Invite kept so you can rejoin from Invites.");

@@ -1696,7 +1696,7 @@ const topLayout: React.CSSProperties = {
 const twoColumnLayout: React.CSSProperties = {
   display: "grid",
   gap: 16,
-  gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
   alignItems: "start",
 };
 

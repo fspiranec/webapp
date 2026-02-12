@@ -79,7 +79,7 @@ type MemberRow = {
   user_id: string;
   full_name: string | null;
   email: string | null;
-  };
+};
 
 type MsgRow = {
   id: string;
@@ -180,7 +180,8 @@ export default function EventPage() {
   const isCreator = me?.id === event?.creator_id;
   const hideClaims = !!event?.surprise_mode && !!isCreator;
   const isBirthday = event?.type === "birthday";
-  const inviteLink = typeof window !== "undefined" ? `${window.location.origin}/join/${eventId}` : `/join/${eventId}`;
+  const inviteLink =
+    typeof window !== "undefined" ? `${window.location.origin}/join/${eventId}` : `/join/${eventId}`;
 
   function canViewTask(task: TaskRow) {
     if (task.visibility === "public") return true;
@@ -336,10 +337,7 @@ export default function EventPage() {
     setPendingMyInvites(myInv.count ?? 0);
 
     // Friends
-    const fr = await supabase
-      .from("friends")
-      .select("id,friend_email,friend_name")
-      .order("created_at", { ascending: false });
+    const fr = await supabase.from("friends").select("id,friend_email,friend_name").order("created_at", { ascending: false });
 
     const frList = (fr.data ?? []) as FriendRow[];
     setFriends(frList);
@@ -484,90 +482,40 @@ export default function EventPage() {
 
     const eventChannel = supabase
       .channel(`event-live-${eventId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "event_members", filter: `event_id=eq.${eventId}` },
-        () => {
-          loadAll({ background: true });
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "item_claims", filter: `event_id=eq.${eventId}` },
-        () => {
-          loadAll({ background: true });
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "event_items", filter: `event_id=eq.${eventId}` },
-        () => {
-          loadAll({ background: true });
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "event_tasks", filter: `event_id=eq.${eventId}` },
-        () => {
-          loadAll({ background: true });
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "event_polls", filter: `event_id=eq.${eventId}` },
-        () => {
-          loadAll({ background: true });
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "event_poll_options" },
-        () => {
-          loadAll({ background: true });
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "event_poll_votes", filter: `event_id=eq.${eventId}` },
-        () => {
-          loadAll({ background: true });
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "event_messages", filter: `event_id=eq.${eventId}` },
-        () => {
-          loadMessages(chatTab);
-        }
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "event_members", filter: `event_id=eq.${eventId}` }, () => {
+        loadAll({ background: true });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "item_claims", filter: `event_id=eq.${eventId}` }, () => {
+        loadAll({ background: true });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "event_items", filter: `event_id=eq.${eventId}` }, () => {
+        loadAll({ background: true });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "event_tasks", filter: `event_id=eq.${eventId}` }, () => {
+        loadAll({ background: true });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "event_polls", filter: `event_id=eq.${eventId}` }, () => {
+        loadAll({ background: true });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "event_poll_options" }, () => {
+        loadAll({ background: true });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "event_poll_votes", filter: `event_id=eq.${eventId}` }, () => {
+        loadAll({ background: true });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "event_messages", filter: `event_id=eq.${eventId}` }, () => {
+        loadMessages(chatTab);
+      })
       .subscribe();
 
     const inviteChannel = supabase
       .channel(`event-invites-${eventId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "event_invites",
-          filter: `event_id=eq.${eventId}`,
-        },
-        () => {
-          loadAll({ background: true });
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "event_invites",
-          filter: `email=eq.${me.email.toLowerCase()}`,
-        },
-        () => {
-          loadAll({ background: true });
-        }
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "event_invites", filter: `event_id=eq.${eventId}` }, () => {
+        loadAll({ background: true });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "event_invites", filter: `email=eq.${me.email.toLowerCase()}` }, () => {
+        loadAll({ background: true });
+      })
       .subscribe();
 
     const fallbackPoll = window.setInterval(() => {
@@ -1008,13 +956,22 @@ export default function EventPage() {
 
   /* ================= UI ================= */
 
-  if (loading) return <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}><Card><p>Loading…</p></Card></div>;
+  if (loading)
+    return (
+      <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
+        <Card>
+          <p>Loading…</p>
+        </Card>
+      </div>
+    );
 
   if (!event) {
     return (
       <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
         <Card>
-          <a href="/events" style={linkStyle}>← Back</a>
+          <a href="/events" style={linkStyle}>
+            ← Back
+          </a>
           <h2 style={{ marginTop: 10 }}>Event not found</h2>
           {status && <p style={{ color: "#fca5a5" }}>{status}</p>}
         </Card>
@@ -1022,20 +979,24 @@ export default function EventPage() {
     );
   }
 
-  const topLayoutStyle = isMobile ? { ...topLayout, gridTemplateColumns: "1fr" } : topLayout;
-  const twoColumnLayoutStyle = isMobile ? { ...twoColumnLayout, gridTemplateColumns: "1fr" } : twoColumnLayout;
+  // ✅ AUTO-FIT grids already collapse to 1 column on mobile, so no manual isMobile override needed
+  const topLayoutStyle = topLayout;
+  const twoColumnLayoutStyle = twoColumnLayout;
 
   return (
     <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
       <div
         style={{
-          maxWidth: isMobile ? "100%" : 980,
+          width: "100%",
+          maxWidth: 1600, // change to "100%" for true edge-to-edge
           margin: "0 auto",
           color: "#e5e7eb",
           fontFamily: "system-ui",
         }}
       >
-        <a href="/events" style={linkStyle}>← Back to events</a>
+        <a href="/events" style={linkStyle}>
+          ← Back to events
+        </a>
 
         <div style={topLayoutStyle}>
           <Card>
@@ -1055,10 +1016,18 @@ export default function EventPage() {
               </div>
 
               <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
-                {me?.email ? <>Signed in as <b>{me.email}</b></> : null}
+                {me?.email ? (
+                  <>
+                    Signed in as <b>{me.email}</b>
+                  </>
+                ) : null}
                 <div style={{ marginTop: 6 }}>
-                  <a href="/profile" style={navLink}>Profile</a>{" "}
-                  <a href="/invites" style={navLink}>Invites{pendingMyInvites > 0 ? ` (${pendingMyInvites}) 🔔` : ""}</a>
+                  <a href="/profile" style={navLink}>
+                    Profile
+                  </a>{" "}
+                  <a href="/invites" style={navLink}>
+                    Invites{pendingMyInvites > 0 ? ` (${pendingMyInvites}) 🔔` : ""}
+                  </a>
                 </div>
                 {isCreator && (
                   <div style={{ marginTop: 10 }}>
@@ -1085,13 +1054,16 @@ export default function EventPage() {
                 placeholder="Your password"
                 style={inputStyle}
               />
-              <button onClick={deleteEventWithPassword} style={btnDanger}>Delete event permanently</button>
+              <button onClick={deleteEventWithPassword} style={btnDanger}>
+                Delete event permanently
+              </button>
 
               {deleteStatus && <div style={statusBoxStyle(deleteStatus.startsWith("✅"))}>{deleteStatus}</div>}
             </Card>
           )}
         </div>
 
+        {/* ✅ AUTO-FIT grid: becomes 1 col on mobile, 2/3/4 on bigger screens */}
         <div style={twoColumnLayoutStyle}>
           <div style={columnStack}>
             {/* PEOPLE COMING */}
@@ -1121,7 +1093,9 @@ export default function EventPage() {
 
                 {!isCreator && (
                   <div style={{ marginTop: 8 }}>
-                    <button onClick={leaveEvent} style={btnDanger}>Leave event</button>
+                    <button onClick={leaveEvent} style={btnDanger}>
+                      Leave event
+                    </button>
                     {leaveStatus && <div style={statusBoxStyle(leaveStatus.startsWith("✅"))}>{leaveStatus}</div>}
                   </div>
                 )}
@@ -1156,7 +1130,11 @@ export default function EventPage() {
 
                     {friends.length === 0 ? (
                       <div style={{ color: "rgba(229,231,235,0.75)" }}>
-                        No friends yet. Add them in <a href="/profile" style={navLink}>/profile</a>.
+                        No friends yet. Add them in{" "}
+                        <a href="/profile" style={navLink}>
+                          /profile
+                        </a>
+                        .
                       </div>
                     ) : (
                       <select
@@ -1182,7 +1160,9 @@ export default function EventPage() {
                       <button onClick={inviteSelectedFriends} style={btnPrimary}>
                         Invite selected ({selectedFriends.length})
                       </button>
-                      <button onClick={clearSelected} style={btnGhost}>Clear selection</button>
+                      <button onClick={clearSelected} style={btnGhost}>
+                        Clear selection
+                      </button>
                     </div>
 
                     {bulkStatus && <div style={statusBoxStyle(bulkStatus.startsWith("✅"))}>{bulkStatus}</div>}
@@ -1198,7 +1178,9 @@ export default function EventPage() {
                         placeholder="friend@email.com"
                         style={inputStyle}
                       />
-                      <button onClick={sendSingleInvite} style={btnPrimary}>Send invite</button>
+                      <button onClick={sendSingleInvite} style={btnPrimary}>
+                        Send invite
+                      </button>
                     </div>
 
                     {inviteStatus && <div style={statusBoxStyle(inviteStatus.startsWith("✅"))}>{inviteStatus}</div>}
@@ -1209,9 +1191,7 @@ export default function EventPage() {
                       <div style={{ color: "rgba(229,231,235,0.75)" }}>No invites yet.</div>
                     ) : (
                       <details style={detailsStyle}>
-                        <summary style={summaryStyle}>
-                          Invited people ({invites.length})
-                        </summary>
+                        <summary style={summaryStyle}>Invited people ({invites.length})</summary>
                         <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
                           {invites.map((inv) => (
                             <div
@@ -1229,7 +1209,9 @@ export default function EventPage() {
                                 </div>
                               </div>
 
-                              <button style={btnDangerSmall} onClick={() => uninvite(inv.id)}>Uninvite</button>
+                              <button style={btnDangerSmall} onClick={() => uninvite(inv.id)}>
+                                Uninvite
+                              </button>
                             </div>
                           ))}
                         </div>
@@ -1239,10 +1221,9 @@ export default function EventPage() {
                 </div>
               )}
             </Card>
-
           </div>
 
-          {/* POLLS */}
+          {/* POLLS + TASKS */}
           <div style={columnStack}>
             {me && (
               <PollsCard
@@ -1275,11 +1256,7 @@ export default function EventPage() {
                     onChange={(e) => setTaskDescription(e.target.value)}
                     style={{ ...inputStyle, minHeight: 90, resize: "vertical" as const }}
                   />
-                  <select
-                    value={taskAssigneeId}
-                    onChange={(e) => setTaskAssigneeId(e.target.value)}
-                    style={inputStyle}
-                  >
+                  <select value={taskAssigneeId} onChange={(e) => setTaskAssigneeId(e.target.value)} style={inputStyle}>
                     <option value="">Assign to…</option>
                     {members.map((m) => (
                       <option key={m.user_id} value={m.user_id}>
@@ -1320,9 +1297,7 @@ export default function EventPage() {
                 ) : (
                   tasks.filter(canViewTask).map((task) => {
                     const editing = editTaskId === task.id;
-                    const assignee = task.assignee_id
-                      ? members.find((m) => m.user_id === task.assignee_id)
-                      : null;
+                    const assignee = task.assignee_id ? members.find((m) => m.user_id === task.assignee_id) : null;
 
                     return (
                       <div
@@ -1378,8 +1353,12 @@ export default function EventPage() {
                                 </select>
                               </div>
                               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                                <button onClick={saveTaskEdit} style={btnPrimary}>Save</button>
-                                <button onClick={cancelTaskEdit} style={btnGhost}>Cancel</button>
+                                <button onClick={saveTaskEdit} style={btnPrimary}>
+                                  Save
+                                </button>
+                                <button onClick={cancelTaskEdit} style={btnGhost}>
+                                  Cancel
+                                </button>
                               </div>
                             </div>
                           ) : (
@@ -1394,12 +1373,12 @@ export default function EventPage() {
                                 </span>
                               </div>
                               {task.description && (
-                                <div style={{ marginTop: 6, color: "rgba(229,231,235,0.8)" }}>
-                                  {task.description}
-                                </div>
+                                <div style={{ marginTop: 6, color: "rgba(229,231,235,0.8)" }}>{task.description}</div>
                               )}
                               <div style={{ marginTop: 6, color: "rgba(229,231,235,0.7)", fontSize: 13 }}>
-                                {assignee ? `Assigned to ${displayNameByUser(assignee.user_id, assignee.full_name, null)}` : "Unassigned"}
+                                {assignee
+                                  ? `Assigned to ${displayNameByUser(assignee.user_id, assignee.full_name, null)}`
+                                  : "Unassigned"}
                               </div>
                             </>
                           )}
@@ -1425,8 +1404,12 @@ export default function EventPage() {
                             </select>
                             {canUpdateTask(task) && (
                               <>
-                                <button onClick={() => startTaskEdit(task)} style={btnGhostSmall}>Edit</button>
-                                <button onClick={() => deleteTask(task.id)} style={btnDangerSmall}>Delete</button>
+                                <button onClick={() => startTaskEdit(task)} style={btnGhostSmall}>
+                                  Edit
+                                </button>
+                                <button onClick={() => deleteTask(task.id)} style={btnDangerSmall}>
+                                  Delete
+                                </button>
                               </>
                             )}
                           </div>
@@ -1486,10 +1469,10 @@ export default function EventPage() {
                 const claimText = hideClaims
                   ? "🎁 Surprise mode: creator can’t see claims"
                   : cs.length === 0
-                    ? "Not claimed yet"
-                    : it.claim_mode === "single"
-                      ? `Claimed by ${displayNameByUser(cs[0].user_id, cs[0].full_name, cs[0].email)}`
-                      : `Claimed by ${cs.map((c) => displayNameByUser(c.user_id, c.full_name, c.email)).join(", ")}`;
+                  ? "Not claimed yet"
+                  : it.claim_mode === "single"
+                  ? `Claimed by ${displayNameByUser(cs[0].user_id, cs[0].full_name, cs[0].email)}`
+                  : `Claimed by ${cs.map((c) => displayNameByUser(c.user_id, c.full_name, c.email)).join(", ")}`;
 
                 const editing = editItemId === it.id;
 
@@ -1506,8 +1489,12 @@ export default function EventPage() {
                           </select>
 
                           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                            <button style={btnPrimary} onClick={saveEdit}>Save</button>
-                            <button style={btnGhost} onClick={cancelEdit}>Cancel</button>
+                            <button style={btnPrimary} onClick={saveEdit}>
+                              Save
+                            </button>
+                            <button style={btnGhost} onClick={cancelEdit}>
+                              Cancel
+                            </button>
                           </div>
                         </div>
                       ) : (
@@ -1522,13 +1509,9 @@ export default function EventPage() {
                             ) : null}
                           </div>
 
-                          {it.notes && (
-                            <div style={{ marginTop: 6, color: "rgba(229,231,235,0.75)" }}>{it.notes}</div>
-                          )}
+                          {it.notes && <div style={{ marginTop: 6, color: "rgba(229,231,235,0.75)" }}>{it.notes}</div>}
 
-                          <div style={{ marginTop: 8, color: "rgba(229,231,235,0.82)", fontSize: 13 }}>
-                            {claimText}
-                          </div>
+                          <div style={{ marginTop: 8, color: "rgba(229,231,235,0.82)", fontSize: 13 }}>{claimText}</div>
                         </>
                       )}
                     </div>
@@ -1542,15 +1525,23 @@ export default function EventPage() {
                         }}
                       >
                         {!iClaimed ? (
-                          <button onClick={() => claim(it.id)} style={smallBtnStyle}>Claim</button>
+                          <button onClick={() => claim(it.id)} style={smallBtnStyle}>
+                            Claim
+                          </button>
                         ) : (
-                          <button onClick={() => unclaim(it.id)} style={smallBtnDangerStyle}>Unclaim</button>
+                          <button onClick={() => unclaim(it.id)} style={smallBtnDangerStyle}>
+                            Unclaim
+                          </button>
                         )}
 
                         {canEdit && (
                           <>
-                            <button onClick={() => startEdit(it)} style={btnGhostSmall}>Edit</button>
-                            <button onClick={() => deleteItem(it.id)} style={btnDangerSmall}>Delete</button>
+                            <button onClick={() => startEdit(it)} style={btnGhostSmall}>
+                              Edit
+                            </button>
+                            <button onClick={() => deleteItem(it.id)} style={btnDangerSmall}>
+                              Delete
+                            </button>
                           </>
                         )}
                       </div>
@@ -1602,12 +1593,13 @@ export default function EventPage() {
               style={{ ...inputStyle, minHeight: 90 }}
             />
 
-            <button style={btnPrimary} onClick={sendMessage}>Send</button>
+            <button style={btnPrimary} onClick={sendMessage}>
+              Send
+            </button>
 
             {chatStatus && <div style={statusBoxStyle(chatStatus.startsWith("✅"))}>{chatStatus}</div>}
           </div>
         </Card>
-
       </div>
     </div>
   );
@@ -1684,17 +1676,27 @@ const rowStyle: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
 };
 
+/**
+ * ✅ UPDATED: auto-fit grid
+ * - mobile: 1 column
+ * - medium: 2 columns
+ * - wide: 3+ columns (as space allows)
+ */
 const topLayout: React.CSSProperties = {
   display: "grid",
   gap: 16,
-  gridTemplateColumns: "minmax(0, 1.8fr) minmax(0, 0.9fr)",
+  gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))",
   alignItems: "start",
 };
 
+/**
+ * ✅ UPDATED: auto-fit grid for the main content columns
+ * (the section that used to be exactly 2 columns)
+ */
 const twoColumnLayout: React.CSSProperties = {
   display: "grid",
   gap: 16,
-  gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+  gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
   alignItems: "start",
 };
 

@@ -106,6 +106,8 @@ type TaskRow = {
 
 /* ================= PAGE ================= */
 
+// Event detail workspace combining membership, invites, polls, tasks, items, and chat.
+// This component is intentionally large because it orchestrates cross-feature state in one place.
 export default function EventPage() {
   const { id: eventId } = useParams<{ id: string }>();
   const router = useRouter();
@@ -177,12 +179,15 @@ export default function EventPage() {
 
   /* ================= HELPERS ================= */
 
+  // Derived permission flags used across the page to avoid repeating role checks in JSX.
   const isCreator = me?.id === event?.creator_id;
   const hideClaims = !!event?.surprise_mode && !!isCreator;
   const isBirthday = event?.type === "birthday";
   const inviteLink =
     typeof window !== "undefined" ? `${window.location.origin}/join/${eventId}` : `/join/${eventId}`;
 
+  // Secret tasks are visible only to the event creator and the explicit assignee.
+  // This keeps surprise/sensitive prep work private while preserving collaboration.
   function canViewTask(task: TaskRow) {
     if (task.visibility === "public") return true;
     if (isCreator) return true;
@@ -190,14 +195,19 @@ export default function EventPage() {
     return false;
   }
 
+  // Only the creator can edit task metadata (title/assignee/visibility) to avoid conflicting edits.
   function canUpdateTask(task: TaskRow) {
     return !!isCreator;
   }
 
+  // Status changes are allowed for both creator and assignee because completion progress
+  // is usually updated by the person doing the work.
   function canChangeTaskStatus(task: TaskRow) {
     return !!isCreator || (!!task.assignee_id && task.assignee_id === me?.id);
   }
 
+  // Build a lookup map once per claims change so rendering each item is O(1).
+  // Without this memoization each render would repeatedly filter the full claims array.
   const claimsByItem = useMemo(() => {
     const map = new Map<string, ClaimRow[]>();
     for (const c of claims) {
@@ -208,6 +218,8 @@ export default function EventPage() {
     return map;
   }, [claims]);
 
+  // Prefer profile full name, then email, then a short id fallback so every row
+  // always has a stable human-readable label.
   function displayNameByUser(userId: string, fullName: string | null, email?: string | null) {
     const name = (fullName ?? "").trim();
     if (name) return name;
@@ -216,15 +228,18 @@ export default function EventPage() {
     return userId.slice(0, 6);
   }
 
+  // Convert checkbox-like selection state into actual friend rows for bulk invite UX.
   const selectedFriends = useMemo(() => {
     const ids = Object.keys(selectedFriendIds).filter((k) => selectedFriendIds[k]);
     return friends.filter((f) => ids.includes(f.id));
   }, [selectedFriendIds, friends]);
 
+  // Resets bulk selection after a successful invite operation.
   function clearSelected() {
     setSelectedFriendIds({});
   }
 
+  // Normalizes a list of selected ids into a dictionary for constant-time lookups in UI.
   function setSelectedFriendIdsFromSelect(selectedIds: string[]) {
     setSelectedFriendIds(
       selectedIds.reduce<Record<string, boolean>>((acc, id) => {
@@ -236,6 +251,8 @@ export default function EventPage() {
 
   /* ================= LOAD ALL ================= */
 
+  // Central data loader for the entire screen.
+  // It fetches user/session first, then all event-related resources in a deterministic order.
   async function loadAll(opts?: { background?: boolean }) {
     if (!opts?.background) setLoading(true);
     setStatus("");
@@ -432,6 +449,8 @@ export default function EventPage() {
     if (!opts?.background) setLoading(false);
   }
 
+  // Loads chat messages per visibility channel and enriches them with sender profile data
+  // so the UI can show names instead of raw ids.
   async function loadMessages(tab: "general" | "secret") {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
@@ -531,6 +550,8 @@ export default function EventPage() {
 
   /* ================= ACTIONS: ITEMS ================= */
 
+  // Creates a new gift/task item proposed by the current member.
+  // Validation runs client-side first to reduce unnecessary round-trips.
   async function addItem() {
     setStatus("");
     const title = newItemTitle.trim();
@@ -559,6 +580,7 @@ export default function EventPage() {
     await loadAll({ background: true });
   }
 
+  // Enters inline edit mode by copying the current item fields into dedicated edit state.
   function startEdit(it: ItemRow) {
     setEditItemId(it.id);
     setEditTitle(it.title);
@@ -567,6 +589,7 @@ export default function EventPage() {
     setStatus("");
   }
 
+  // Exits edit mode and leaves persisted data untouched.
   function cancelEdit() {
     setEditItemId(null);
     setEditTitle("");
@@ -574,6 +597,7 @@ export default function EventPage() {
     setEditMode("single");
   }
 
+  // Persists item edits and then refreshes all data so related aggregates stay consistent.
   async function saveEdit() {
     if (!editItemId) return;
     const supabase = getSupabaseBrowserClient();
@@ -599,6 +623,7 @@ export default function EventPage() {
     await loadAll({ background: true });
   }
 
+  // Permanently removes an item. This is destructive and therefore handled explicitly.
   async function deleteItem(itemId: string) {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
@@ -613,6 +638,7 @@ export default function EventPage() {
     await loadAll({ background: true });
   }
 
+  // Claims an item for the current user, respecting single vs multi-claim server constraints.
   async function claim(itemId: string) {
     setStatus("");
     const supabase = getSupabaseBrowserClient();
@@ -633,6 +659,7 @@ export default function EventPage() {
     await loadAll({ background: true });
   }
 
+  // Removes the current user claim from an item (undo action).
   async function unclaim(itemId: string) {
     setStatus("");
     const supabase = getSupabaseBrowserClient();
@@ -656,6 +683,7 @@ export default function EventPage() {
 
   /* ================= ACTIONS: INVITES ================= */
 
+  // Shared invite helper used by both single-email invite and bulk friend invite flows.
   async function sendInvite(email: string) {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return { ok: false, message: "No supabase client" };
@@ -682,6 +710,7 @@ export default function EventPage() {
     return { ok: true, message: `Invited: ${clean}` };
   }
 
+  // Validates and sends one typed email invite from the input box.
   async function sendSingleInvite() {
     setInviteStatus("");
     setBulkStatus("");
@@ -705,6 +734,7 @@ export default function EventPage() {
     await loadAll({ background: true });
   }
 
+  // Sends many invites sequentially and keeps granular error reporting for each email.
   async function inviteSelectedFriends() {
     setInviteStatus("");
     setBulkStatus("");
@@ -735,6 +765,7 @@ export default function EventPage() {
     await loadAll({ background: true });
   }
 
+  // Revokes a pending invite. Accepted invites are guarded by backend policies.
   async function uninvite(inviteId: string) {
     setInviteStatus("");
     const supabase = getSupabaseBrowserClient();
@@ -752,6 +783,7 @@ export default function EventPage() {
 
   /* ================= LEAVE EVENT ================= */
 
+  // Current user exits membership using RPC so related membership/invite state is cleaned atomically.
   async function leaveEvent() {
     setLeaveStatus("");
     const supabase = getSupabaseBrowserClient();
@@ -770,6 +802,7 @@ export default function EventPage() {
 
   /* ================= DELETE EVENT (creator + password required) ================= */
 
+  // Extra safety for destructive delete: re-auth with password before removing the event.
   async function deleteEventWithPassword() {
     if (!event || !me?.email) return;
 
@@ -808,11 +841,13 @@ export default function EventPage() {
 
   /* ================= CHAT ================= */
 
+  // Changes active chat channel and immediately loads the matching message history.
   async function switchTab(tab: "general" | "secret") {
     setChatTab(tab);
     await loadMessages(tab);
   }
 
+  // Posts a new chat message in the currently selected visibility channel.
   async function sendMessage() {
     setChatStatus("");
     const supabase = getSupabaseBrowserClient();
@@ -841,6 +876,7 @@ export default function EventPage() {
 
   /* ================= TASKS ================= */
 
+  // Creates planning tasks that can be public or secret and optionally assigned to a member.
   async function createTask() {
     if (!me || !isCreator) return;
     setTaskStatusMsg("");
@@ -878,6 +914,7 @@ export default function EventPage() {
     await loadAll({ background: true });
   }
 
+  // Opens task edit mode with a snapshot of current values.
   function startTaskEdit(task: TaskRow) {
     setEditTaskId(task.id);
     setEditTaskTitle(task.title);
@@ -888,6 +925,7 @@ export default function EventPage() {
     setTaskStatusMsg("");
   }
 
+  // Closes task editing state without persisting pending form changes.
   function cancelTaskEdit() {
     setEditTaskId(null);
     setEditTaskTitle("");
@@ -897,6 +935,7 @@ export default function EventPage() {
     setEditTaskStatus("todo");
   }
 
+  // Saves task field updates. Only creators can execute this path (guarded in UI and policies).
   async function saveTaskEdit() {
     if (!editTaskId || !isCreator) return;
     const supabase = getSupabaseBrowserClient();
@@ -924,6 +963,7 @@ export default function EventPage() {
     await loadAll({ background: true });
   }
 
+  // Removes a task entirely from the event plan.
   async function deleteTask(taskId: string) {
     if (!isCreator) return;
     const supabase = getSupabaseBrowserClient();
@@ -939,6 +979,7 @@ export default function EventPage() {
     await loadAll();
   }
 
+  // Lightweight status-only update, intentionally separated from full edit for fast progress tracking.
   async function updateTaskStatus(task: TaskRow, status: TaskRow["status"]) {
     if (!canChangeTaskStatus(task)) return;
     const supabase = getSupabaseBrowserClient();
@@ -956,6 +997,7 @@ export default function EventPage() {
 
   /* ================= UI ================= */
 
+  // First paint guard: show a lightweight shell while all parallel data requests resolve.
   if (loading)
     return (
       <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
@@ -965,6 +1007,7 @@ export default function EventPage() {
       </div>
     );
 
+  // If event lookup failed (deleted/unauthorized), render a friendly fallback card.
   if (!event) {
     return (
       <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
@@ -983,6 +1026,7 @@ export default function EventPage() {
   const topLayoutStyle = topLayout;
   const twoColumnLayoutStyle = twoColumnLayout;
 
+  // Main page layout: gradient background + centered max-width container for readability.
   return (
     <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
       <div
@@ -998,7 +1042,9 @@ export default function EventPage() {
           ← Back to events
         </a>
 
+        {/* Top area: event metadata plus creator-only destructive controls. */}
         <div style={topLayoutStyle}>
+          {/* Event summary card: title, schedule, location, quick navigation links. */}
           <Card>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <div>
@@ -1043,6 +1089,7 @@ export default function EventPage() {
           </Card>
 
           {isCreator && (
+            /* Danger zone intentionally isolated so destructive actions are visually separated. */
             <Card>
               <h2 style={{ marginTop: 0, color: "#fecaca" }}>Danger zone</h2>
               <p style={{ color: "rgba(229,231,235,0.75)" }}>Delete event (requires your password).</p>
@@ -1066,7 +1113,7 @@ export default function EventPage() {
         {/* ✅ AUTO-FIT grid: becomes 1 col on mobile, 2/3/4 on bigger screens */}
         <div style={twoColumnLayoutStyle}>
           <div style={columnStack}>
-            {/* PEOPLE COMING */}
+            {/* Membership panel: who joined and member-specific quick actions (leave for non-creators). */}
             <Card>
               <h2 style={{ marginTop: 0 }}>People coming</h2>
               <div style={{ display: "grid", gap: 10 }}>
@@ -1101,7 +1148,7 @@ export default function EventPage() {
                 )}
               </div>
 
-              {/* INVITES */}
+              {/* Invitation panel: link sharing, direct email invites, and friend-based bulk invites. */}
               {isCreator && (
                 <div style={{ marginTop: 16 }}>
                   <h3 style={{ margin: 0 }}>Invites</h3>
@@ -1223,8 +1270,9 @@ export default function EventPage() {
             </Card>
           </div>
 
-          {/* POLLS + TASKS */}
+          {/* Collaboration tools column: polls for decisions + tasks for execution planning. */}
           <div style={columnStack}>
+            {/* Poll widget requires authenticated user id for vote ownership checks. */}
             {me && (
               <PollsCard
                 eventId={eventId}
@@ -1238,7 +1286,7 @@ export default function EventPage() {
               />
             )}
 
-            {/* TASKS */}
+            {/* Task board with creator-only creation and role-aware editing/status controls. */}
             <Card>
               <h2 style={{ marginTop: 0 }}>Tasks</h2>
 
@@ -1423,7 +1471,7 @@ export default function EventPage() {
           </div>
         </div>
 
-        {/* ITEMS */}
+        {/* Shared items board where members can claim responsibilities or contributions. */}
         <Card>
           <h2 style={{ marginTop: 0 }}>Items</h2>
 
@@ -1553,7 +1601,8 @@ export default function EventPage() {
           )}
         </Card>
 
-        {/* CHAT */}
+        {/* Chat panel: channelized discussion (general + optional birthday secret channel). */}
+        {/* Rendering keeps message history above composer so latest context is always visible. */}
         <Card>
           <h2 style={{ marginTop: 0 }}>Chat</h2>
 
@@ -1607,6 +1656,7 @@ export default function EventPage() {
 
 /* ================= STYLES ================= */
 
+// Shared card wrapper keeps visual rhythm and reduces repeated style declarations across sections.
 function Card({ children }: { children: React.ReactNode }) {
   return (
     <div
@@ -1624,15 +1674,19 @@ function Card({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Page-level backdrop and spacing tokens for this screen.
 const pageStyle: React.CSSProperties = {
   minHeight: "100vh",
   background: "linear-gradient(180deg, #0b1020 0%, #0f172a 60%, #111827 100%)",
   padding: 24,
 };
 
+// Compact inline links used in the account/navigation area of the header.
 const navLink: React.CSSProperties = { color: "#93c5fd", textDecoration: "none", marginRight: 10 };
+// Generic link style for primary back-navigation anchors.
 const linkStyle: React.CSSProperties = { color: "#93c5fd", textDecoration: "none", fontFamily: "system-ui" };
 
+// Shared input foundation for text/select/textarea controls to keep forms visually consistent.
 const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "10px 12px",
@@ -1682,6 +1736,7 @@ const rowStyle: React.CSSProperties = {
  * - medium: 2 columns
  * - wide: 3+ columns (as space allows)
  */
+// Responsive top grid for summary + danger zone cards.
 const topLayout: React.CSSProperties = {
   display: "grid",
   gap: 16,
@@ -1693,6 +1748,7 @@ const topLayout: React.CSSProperties = {
  * ✅ UPDATED: auto-fit grid for the main content columns
  * (the section that used to be exactly 2 columns)
  */
+// Responsive main content grid for the rest of the event tools.
 const twoColumnLayout: React.CSSProperties = {
   display: "grid",
   gap: 16,
@@ -1700,6 +1756,7 @@ const twoColumnLayout: React.CSSProperties = {
   alignItems: "start",
 };
 
+// Vertical stack used inside each main grid column.
 const columnStack: React.CSSProperties = {
   display: "grid",
   gap: 14,
@@ -1728,6 +1785,7 @@ const summaryStyle: React.CSSProperties = {
   listStyle: "none",
 };
 
+// Scrollable chat transcript container with bounded height so input controls stay visible.
 const chatBox: React.CSSProperties = {
   borderRadius: 14,
   border: "1px solid rgba(255,255,255,0.10)",
@@ -1738,6 +1796,7 @@ const chatBox: React.CSSProperties = {
   overflowY: "auto",
 };
 
+// Tiny style helpers centralize color tokens so status badges remain consistent app-wide.
 function pillStyle(color: string): React.CSSProperties {
   return {
     fontSize: 12,
@@ -1749,6 +1808,7 @@ function pillStyle(color: string): React.CSSProperties {
   };
 }
 
+// Maps semantic task states to accessible, high-contrast label colors.
 function taskStatusColor(status: TaskRow["status"]) {
   switch (status) {
     case "done":
@@ -1761,6 +1821,7 @@ function taskStatusColor(status: TaskRow["status"]) {
   }
 }
 
+// Primary button style with explicit disabled affordance to communicate non-clickable state.
 function primaryBtnStyle(disabled: boolean): React.CSSProperties {
   return {
     padding: "11px 14px",
@@ -1846,6 +1907,7 @@ const smallBtnDangerStyle: React.CSSProperties = {
   fontWeight: 700,
 };
 
+// Shared status message style for success/error feedback blocks.
 function statusBoxStyle(ok: boolean): React.CSSProperties {
   return {
     marginTop: 12,

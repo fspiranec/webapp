@@ -7,6 +7,7 @@ import { useIsMobile } from "@/lib/useIsMobile";
 
 type EventType = "grill" | "birthday" | "other";
 
+// Dedicated event-creation form for richer setup than the quick-create flow.
 export default function NewEventPage() {
   const router = useRouter();
   const isMobile = useIsMobile();
@@ -30,6 +31,7 @@ export default function NewEventPage() {
     });
   }, [router]);
 
+  // Persists event row and redirects to detail page so creator can continue setup.
   async function createEvent() {
     setSaving(true);
     setStatus("");

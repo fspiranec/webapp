@@ -10,6 +10,7 @@ type EventRow = {
   type: string;
 };
 
+// Public join flow reached by invite link; it validates auth state and joins via RPC.
 export default function JoinByLinkPage() {
   const { eventId } = useParams<{ eventId: string }>();
   const router = useRouter();
@@ -18,6 +19,7 @@ export default function JoinByLinkPage() {
   const [status, setStatus] = useState("Loading…");
   const [joining, setJoining] = useState(false);
 
+  // Loads current user and event teaser metadata so the join confirmation has context.
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
@@ -48,6 +50,7 @@ export default function JoinByLinkPage() {
     })();
   }, [eventId, router]);
 
+  // Calls backend join RPC and routes to event page on success.
   async function joinNow() {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;

@@ -12,6 +12,7 @@ type FriendRow = {
   created_at: string;
 };
 
+// Profile/settings page: account identity, password changes, and personal friend list management.
 export default function ProfilePage() {
   const router = useRouter();
   const isMobile = useIsMobile();
@@ -29,6 +30,7 @@ export default function ProfilePage() {
   const [newPassword, setNewPassword] = useState("");
   const [pwStatus, setPwStatus] = useState("");
 
+  // Loads session email and friend rows so page opens with current persisted state.
   async function load() {
     setLoading(true);
     setStatus("");
@@ -63,6 +65,7 @@ export default function ProfilePage() {
     load();
   }, []);
 
+  // Adds a friend record used later for bulk-invite shortcuts in event pages.
   async function addFriend() {
     setStatus("");
     const supabase = getSupabaseBrowserClient();
@@ -115,6 +118,7 @@ export default function ProfilePage() {
     await load();
   }
 
+  // Re-authenticates with current password before updating to a new one.
   async function changePassword() {
     setPwStatus("");
     const supabase = getSupabaseBrowserClient();
@@ -275,6 +279,7 @@ export default function ProfilePage() {
 }
 
 /* UI */
+// Lightweight layout primitives and style constants for this page.
 
 function Shell({ children, isMobile }: { children: React.ReactNode; isMobile: boolean }) {
   return (

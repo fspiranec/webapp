@@ -14,6 +14,7 @@ type InviteRow = {
   events?: { id: string; title: string } | null;
 };
 
+// Invite inbox for the signed-in email: accept/reject pending event invitations.
 export default function InvitesPage() {
   const router = useRouter();
   const isMobile = useIsMobile();
@@ -21,6 +22,7 @@ export default function InvitesPage() {
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
 
+  // Reads pending/accepted invite rows and keeps UI counters synchronized.
   async function load() {
     setLoading(true);
     setStatus("");

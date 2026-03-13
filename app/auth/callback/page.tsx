@@ -4,9 +4,12 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
+// OAuth callback landing page.
+// It finalizes session, ensures profile row exists, then redirects to requested destination.
 export default function AuthCallbackPage() {
   const router = useRouter();
 
+  // Run once on mount to complete auth hand-off from provider redirect.
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;

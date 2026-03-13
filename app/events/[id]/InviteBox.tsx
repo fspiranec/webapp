@@ -3,10 +3,13 @@
 import { useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
+// Compact invite widget used in event pages to invite by email.
+// Reusable invite panel used by event detail surfaces where quick email invites are needed.
 export default function InviteBox({ eventId }: { eventId: string }) {
   const [email, setEmail] = useState("");
   const [msg, setMsg] = useState("");
 
+  // Validates input, ensures logged-in user, then writes invite row to Supabase.
   async function sendInvite() {
     setMsg("");
     const supabase = getSupabaseBrowserClient();
@@ -18,6 +21,7 @@ export default function InviteBox({ eventId }: { eventId: string }) {
       return;
     }
 
+    // Normalize email so duplicates caused by casing/whitespace are less likely.
     const clean = email.trim().toLowerCase();
     if (!clean.includes("@")) {
       setMsg("❌ Enter a valid email");
@@ -46,6 +50,7 @@ export default function InviteBox({ eventId }: { eventId: string }) {
         Enter email to invite. They must sign in with the same email and accept the invite.
       </p>
 
+      {/* Input row wraps on narrow screens so button remains reachable without horizontal scroll. */}
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
         <input
           value={email}
@@ -67,6 +72,7 @@ export default function InviteBox({ eventId }: { eventId: string }) {
   );
 }
 
+// Card-like wrapper aligned with the dark translucent design system used across the app.
 const box: React.CSSProperties = {
   marginTop: 14,
   padding: 14,
@@ -75,6 +81,7 @@ const box: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
 };
 
+// Flexible input grows to fill space but keeps a minimum width for readability.
 const input: React.CSSProperties = {
   flex: 1,
   minWidth: 240,
@@ -86,6 +93,7 @@ const input: React.CSSProperties = {
   outline: "none",
 };
 
+// Primary gradient action button to indicate the main action in this widget.
 const btn: React.CSSProperties = {
   padding: "10px 12px",
   borderRadius: 12,

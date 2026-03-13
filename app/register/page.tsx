@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useIsMobile } from "@/lib/useIsMobile";
 
+// Registration screen captures profile basics and creates both auth + profile records.
 export default function RegisterPage() {
   const router = useRouter();
   const supabase = getSupabaseBrowserClient();
@@ -19,11 +20,13 @@ export default function RegisterPage() {
 
   const [status, setStatus] = useState("");
 
+  // Preserve caller intent by honoring `next` query parameter after successful signup.
   function getNextPath() {
     if (typeof window === "undefined") return "/events";
     return new URLSearchParams(window.location.search).get("next") || "/events";
   }
 
+  // Creates Supabase auth user then upserts the public profile used across event features.
   async function register() {
     setStatus("");
 
@@ -208,6 +211,7 @@ const btnGhost: React.CSSProperties = {
   cursor: "pointer",
 };
 
+// Shared success/error status style helper for auth feedback banners.
 function statusBox(ok: boolean): React.CSSProperties {
   return {
     marginTop: 12,

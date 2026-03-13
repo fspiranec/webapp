@@ -19,6 +19,7 @@ type EventRow = {
   surprise_mode: boolean;
 };
 
+// Event edit screen for creators to update core metadata and scheduling information.
 export default function EditEventPage() {
   const { id: eventId } = useParams<{ id: string }>();
   const router = useRouter();

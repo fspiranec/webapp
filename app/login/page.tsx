@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useIsMobile } from "@/lib/useIsMobile";
 
+// Login screen supports email/password and Google OAuth flows.
+// It also preserves a `next` return path so users land where they intended after auth.
 export default function LoginPage() {
   const router = useRouter();
   const supabase = getSupabaseBrowserClient();
@@ -14,11 +16,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState("");
 
+  // Reads optional redirect target from query string; defaults to events hub for safe navigation.
   function getNextPath() {
     if (typeof window === "undefined") return "/events";
     return new URLSearchParams(window.location.search).get("next") || "/events";
   }
 
+  // Standard credential login with lightweight client-side validation for faster feedback.
   async function login() {
     setStatus("");
     const cleanEmail = email.trim().toLowerCase();
@@ -37,6 +41,7 @@ export default function LoginPage() {
     router.push(getNextPath());
   }
 
+  // Starts OAuth redirect flow; Supabase returns user to callback route for profile synchronization.
   async function loginWithGoogle() {
     setStatus("");
     if (!supabase) return setStatus("❌ Supabase not ready");
@@ -111,6 +116,7 @@ export default function LoginPage() {
 }
 
 /* ===== styles ===== */
+// Style tokens below keep this standalone page visually consistent with the rest of the app.
 
 const pageStyle: React.CSSProperties = {
   minHeight: "100vh",

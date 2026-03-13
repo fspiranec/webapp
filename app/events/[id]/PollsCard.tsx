@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
+// Database row shapes consumed by this card. Keeping local types explicit helps keep JSX readable.
 type PollRow = {
   id: string;
   event_id: string;
@@ -34,6 +35,8 @@ type ProfileRow = {
   last_name: string | null;
 };
 
+// PollsCard renders poll creation and voting UI for a single event.
+// It receives all poll data from the parent page and asks parent to reload after writes.
 export default function PollsCard(props: {
   eventId: string;
   meId: string;
@@ -46,15 +49,18 @@ export default function PollsCard(props: {
 }) {
   const { eventId, meId, isCreator, eventMemberCount, polls, options, votes, onReload } = props;
 
+  // Controlled form state for creator poll inputs.
   const [question, setQuestion] = useState("");
   const [mode, setMode] = useState<"single" | "multi">("single");
   const [rawOptions, setRawOptions] = useState("Option 1\nOption 2");
   const [status, setStatus] = useState("");
 
+  // Cache voter profile rows keyed by user id so tooltip rendering is fast and stable.
   const [profilesById, setProfilesById] = useState<Map<string, ProfileRow>>(new Map());
 
   /* ---------- data maps ---------- */
 
+  // Pre-group options by poll for efficient render loops.
   const optionsByPoll = useMemo(() => {
     const m = new Map<string, PollOptionRow[]>();
     for (const o of options) {
@@ -65,6 +71,7 @@ export default function PollsCard(props: {
     return m;
   }, [options]);
 
+  // Pre-group votes by poll to avoid repeated filtering for each card.
   const votesByPoll = useMemo(() => {
     const m = new Map<string, PollVoteRow[]>();
     for (const v of votes) {
@@ -75,6 +82,7 @@ export default function PollsCard(props: {
     return m;
   }, [votes]);
 
+  // Track only current-user votes per poll for quick selected-state checks.
   const myVotesByPoll = useMemo(() => {
     const m = new Map<string, Set<string>>();
     for (const v of votes) {
@@ -88,16 +96,19 @@ export default function PollsCard(props: {
 
   /* ---------- helpers ---------- */
 
+  // Defensive normalization: tolerate legacy/nullable mode values coming from DB.
   function normalizedMode(p: PollRow): "single" | "multi" {
     return (p.mode ?? "single").toLowerCase().includes("multi") ? "multi" : "single";
   }
 
+  // Count votes for one option; used to draw percentages and totals.
   function countVotes(pollId: string, optionId: string) {
     return (votesByPoll.get(pollId) ?? []).filter((v) => v.option_id === optionId).length;
   }
 
   /* ---------- load voter profiles ---------- */
 
+  // Load profile names for all users who voted so the UI can show people, not opaque ids.
   async function loadVoterProfiles() {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
@@ -123,6 +134,7 @@ export default function PollsCard(props: {
     setProfilesById(map);
   }
 
+  // Re-fetch profile metadata whenever vote set changes.
   useEffect(() => {
     loadVoterProfiles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -130,6 +142,7 @@ export default function PollsCard(props: {
 
   /* ---------- actions ---------- */
 
+  // Creates poll + options as two writes: poll first to get id, then options list.
   async function createPoll() {
     setStatus("");
     const q = question.trim();
@@ -171,6 +184,8 @@ export default function PollsCard(props: {
     await onReload();
   }
 
+  // Toggles current user vote for one option.
+  // In single-choice mode we remove previous selection before inserting the new one.
   async function toggleVote(poll: PollRow, optionId: string) {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
@@ -213,10 +228,12 @@ export default function PollsCard(props: {
 
   /* ---------- UI ---------- */
 
+  // UI composition: creation panel (creator only) + existing polls with vote controls.
   return (
     <div style={card}>
       <h2>Polls</h2>
 
+      {/* Creation form is intentionally creator-only to avoid duplicate/competing poll definitions. */}
       {isCreator && (
         <div style={{ ...pollBox, marginBottom: 12 }}>
           <div style={{ fontWeight: 900, marginBottom: 8 }}>Create new poll</div>
@@ -246,6 +263,7 @@ export default function PollsCard(props: {
         </div>
       )}
 
+      {/* Existing polls list; each option button doubles as vote toggle. */}
       <div style={{ display: "grid", gap: 12 }}>
         {polls.map((p) => {
           const opts = optionsByPoll.get(p.id) ?? [];
@@ -264,6 +282,7 @@ export default function PollsCard(props: {
                   const selected = mySet.has(o.id);
                   const c = countVotes(p.id, o.id);
 
+                  // Resolve profile rows for voters on this option to display social proof under labels.
                   const voters = (votesByPoll.get(p.id) ?? [])
                     .filter((v) => v.option_id === o.id)
                     .map((v) => profilesById.get(v.user_id))
@@ -307,6 +326,7 @@ export default function PollsCard(props: {
 
 /* ---------- styles ---------- */
 
+// Outer card that visually matches other dashboard panels on the event page.
 const card: React.CSSProperties = {
   borderRadius: 18,
   padding: 18,
@@ -315,6 +335,7 @@ const card: React.CSSProperties = {
   color: "#e5e7eb",
 };
 
+// Individual poll container used for both create and display blocks.
 const pollBox: React.CSSProperties = {
   borderRadius: 16,
   padding: 14,
@@ -322,6 +343,7 @@ const pollBox: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
 };
 
+// Vote option rendered as a full-width button for easy touch interaction on mobile.
 const optBtn: React.CSSProperties = {
   width: "100%",
   padding: 12,
@@ -332,6 +354,7 @@ const optBtn: React.CSSProperties = {
   cursor: "pointer",
 };
 
+// Shared form field styling for question/mode/options inputs.
 const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "10px 12px",
@@ -342,6 +365,7 @@ const inputStyle: React.CSSProperties = {
   outline: "none",
 };
 
+// High-emphasis action style for creating a new poll.
 const createBtn: React.CSSProperties = {
   padding: "10px 12px",
   borderRadius: 12,

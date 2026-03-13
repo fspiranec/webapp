@@ -14,6 +14,7 @@ type EventRow = {
   surprise_mode: boolean;
 };
 
+// Events dashboard: lists memberships, offers quick navigation, and manages create/delete actions.
 export default function EventsPage() {
   const router = useRouter();
   const isMobile = useIsMobile();

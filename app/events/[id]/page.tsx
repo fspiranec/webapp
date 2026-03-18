@@ -14,6 +14,7 @@ type PollRow = {
   mode: "single" | "multi";
   created_by: string;
   created_at: string;
+  closed_at: string | null;
 };
 
 type PollOptionRow = {
@@ -144,6 +145,9 @@ export default function EventPage() {
   // Invites
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteStatus, setInviteStatus] = useState("");
+  const [emailAllStatus, setEmailAllStatus] = useState("");
+  const [emailAllSubject, setEmailAllSubject] = useState("");
+  const [emailAllMessage, setEmailAllMessage] = useState("");
   const [pendingMyInvites, setPendingMyInvites] = useState(0);
 
   // Multi-invite selection
@@ -258,6 +262,7 @@ export default function EventPage() {
     setStatus("");
     setInviteStatus("");
     setBulkStatus("");
+    setEmailAllStatus("");
     setDeleteStatus("");
     setLeaveStatus("");
     setChatStatus("");
@@ -394,7 +399,7 @@ export default function EventPage() {
     // ===== POLLS (inside loadAll) =====
     const p = await supabase
       .from("event_polls")
-      .select("id,event_id,question,mode,created_by,created_at")
+      .select("id,event_id,question,mode,created_by,created_at,closed_at")
       .eq("event_id", eventId)
       .order("created_at", { ascending: false });
 
@@ -766,6 +771,79 @@ export default function EventPage() {
   }
 
   // Revokes a pending invite. Accepted invites are guarded by backend policies.
+  function buildEmailChangeTemplate() {
+    if (!event) return "";
+
+    const when = event.starts_at
+      ? `${new Date(event.starts_at).toLocaleString()}${event.ends_at ? ` - ${new Date(event.ends_at).toLocaleString()}` : ""}`
+      : "Time will be shared soon.";
+
+    return [
+      `Hello,`,
+      "",
+      `There is an important update for ${event.title}.`,
+      "The event date/time has been changed.",
+      `New schedule: ${when}`,
+      event.location ? `Location: ${event.location}` : null,
+      "",
+      "Please check the event page for the latest details.",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  function fillChangedDateTemplate() {
+    if (!event) return;
+
+    setEmailAllSubject(`Updated event schedule: ${event.title}`);
+    setEmailAllMessage(buildEmailChangeTemplate());
+    setEmailAllStatus("");
+  }
+
+  async function emailAllInvitedUsers() {
+    if (!event) return;
+
+    setEmailAllStatus("");
+
+    const recipientEmails = Array.from(new Set(invites.map((inv) => inv.email.trim().toLowerCase()).filter(Boolean)));
+    if (recipientEmails.length === 0) {
+      setEmailAllStatus("❌ No invited users to email");
+      return;
+    }
+
+    setEmailAllStatus("Sending email…");
+
+    try {
+      const response = await fetch("/api/events/email-invited-users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventId,
+          eventTitle: event.title,
+          eventType: event.type,
+          startsAt: event.starts_at,
+          endsAt: event.ends_at,
+          location: event.location,
+          description: event.description,
+          inviteLink,
+          recipientEmails,
+          subject: emailAllSubject.trim() || undefined,
+          message: emailAllMessage.trim() || undefined,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as { error?: string; sent?: number } | null;
+      if (!response.ok) {
+        setEmailAllStatus(`❌ ${payload?.error ?? "Failed to send email"}`);
+        return;
+      }
+
+      setEmailAllStatus(`✅ Email sent to ${payload?.sent ?? recipientEmails.length} invited user(s)`);
+    } catch (error) {
+      setEmailAllStatus(`❌ ${error instanceof Error ? error.message : "Failed to send email"}`);
+    }
+  }
+
   async function uninvite(inviteId: string) {
     setInviteStatus("");
     const supabase = getSupabaseBrowserClient();
@@ -1152,6 +1230,9 @@ export default function EventPage() {
               {isCreator && (
                 <div style={{ marginTop: 16 }}>
                   <h3 style={{ margin: 0 }}>Invites</h3>
+                  <div style={{ color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
+                    Use the buttons below to invite people and email everyone already invited.
+                  </div>
 
                   <div style={{ marginTop: 10, marginBottom: 14 }}>
                     <div style={{ fontWeight: 900, marginBottom: 8 }}>Invitation link</div>
@@ -1213,6 +1294,41 @@ export default function EventPage() {
                     </div>
 
                     {bulkStatus && <div style={statusBoxStyle(bulkStatus.startsWith("✅"))}>{bulkStatus}</div>}
+                  </div>
+
+                  <hr style={hrStyle} />
+
+                  <div style={{ ...cardInsetStyle, marginTop: 10 }}>
+                    <div style={{ fontWeight: 900, marginBottom: 8 }}>Email all invited users</div>
+                    <div style={{ color: "rgba(229,231,235,0.75)", fontSize: 13 }}>
+                      Write a custom message for invited users, for example when the event date or time changes.
+                    </div>
+
+                    <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+                      <input
+                        value={emailAllSubject}
+                        onChange={(e) => setEmailAllSubject(e.target.value)}
+                        placeholder={`Subject (default: Reminder: ${event.title})`}
+                        style={inputStyle}
+                      />
+
+                      <textarea
+                        value={emailAllMessage}
+                        onChange={(e) => setEmailAllMessage(e.target.value)}
+                        placeholder="Write your email message here..."
+                        style={{ ...inputStyle, minHeight: 140, resize: "vertical" }}
+                      />
+                    </div>
+
+                    <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                      <button onClick={fillChangedDateTemplate} style={btnGhost}>
+                        Use date/time change template
+                      </button>
+                      <button onClick={emailAllInvitedUsers} style={btnPrimary}>
+                        Send custom email ({invites.length})
+                      </button>
+                    </div>
+                    {emailAllStatus && <div style={statusBoxStyle(emailAllStatus.startsWith("✅"))}>{emailAllStatus}</div>}
                   </div>
 
                   <hr style={hrStyle} />
@@ -1918,3 +2034,10 @@ function statusBoxStyle(ok: boolean): React.CSSProperties {
     color: ok ? "#86efac" : "#fca5a5",
   };
 }
+
+const cardInsetStyle: React.CSSProperties = {
+  padding: 14,
+  borderRadius: 14,
+  background: "rgba(255,255,255,0.05)",
+  border: "1px solid rgba(255,255,255,0.10)",
+};

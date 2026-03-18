@@ -199,14 +199,14 @@ export default function PollsCard(props: {
     return isCreator || poll.created_by === meId;
   }
 
-  async function closePoll(pollId: string) {
+  async function runPollAction(pollId: string, action: "close" | "reopen" | "delete") {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
 
     setStatus("");
     setBusyPollId(pollId);
 
-    const res = await supabase.from("event_polls").update({ closed_at: new Date().toISOString() }).eq("id", pollId).eq("event_id", eventId);
+    const res = await supabase.rpc("manage_event_poll", { eid: eventId, target_poll_id: pollId, action });
 
     setBusyPollId(null);
     if (res.error) {
@@ -214,59 +214,20 @@ export default function PollsCard(props: {
       return;
     }
 
-    setStatus("✅ Poll closed");
+    setStatus(action === "delete" ? "✅ Poll deleted" : action === "close" ? "✅ Poll closed" : "✅ Poll reopened");
     await onReload();
+  }
+
+  async function closePoll(pollId: string) {
+    await runPollAction(pollId, "close");
   }
 
   async function reopenPoll(pollId: string) {
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase) return;
-
-    setStatus("");
-    setBusyPollId(pollId);
-
-    const res = await supabase.from("event_polls").update({ closed_at: null }).eq("id", pollId).eq("event_id", eventId);
-
-    setBusyPollId(null);
-    if (res.error) {
-      setStatus(`❌ ${res.error.message}`);
-      return;
-    }
-
-    setStatus("✅ Poll reopened");
-    await onReload();
+    await runPollAction(pollId, "reopen");
   }
 
   async function deletePoll(pollId: string) {
-    const supabase = getSupabaseBrowserClient();
-    if (!supabase) return;
-
-    setStatus("");
-    setBusyPollId(pollId);
-
-    const votesRes = await supabase.from("event_poll_votes").delete().eq("event_id", eventId).eq("poll_id", pollId);
-    if (votesRes.error) {
-      setBusyPollId(null);
-      setStatus(`❌ ${votesRes.error.message}`);
-      return;
-    }
-
-    const optionsRes = await supabase.from("event_poll_options").delete().eq("poll_id", pollId);
-    if (optionsRes.error) {
-      setBusyPollId(null);
-      setStatus(`❌ ${optionsRes.error.message}`);
-      return;
-    }
-
-    const pollRes = await supabase.from("event_polls").delete().eq("id", pollId).eq("event_id", eventId);
-    setBusyPollId(null);
-    if (pollRes.error) {
-      setStatus(`❌ ${pollRes.error.message}`);
-      return;
-    }
-
-    setStatus("✅ Poll deleted");
-    await onReload();
+    await runPollAction(pollId, "delete");
   }
 
   return (

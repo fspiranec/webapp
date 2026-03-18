@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
-// Database row shapes consumed by this card. Keeping local types explicit helps keep JSX readable.
 type PollRow = {
   id: string;
   event_id: string;
@@ -11,6 +10,7 @@ type PollRow = {
   mode?: string | null;
   created_by: string;
   created_at?: string | null;
+  closed_at?: string | null;
 };
 
 type PollOptionRow = {
@@ -35,8 +35,6 @@ type ProfileRow = {
   last_name: string | null;
 };
 
-// PollsCard renders poll creation and voting UI for a single event.
-// It receives all poll data from the parent page and asks parent to reload after writes.
 export default function PollsCard(props: {
   eventId: string;
   meId: string;
@@ -48,19 +46,15 @@ export default function PollsCard(props: {
   onReload: () => Promise<void>;
 }) {
   const { eventId, meId, isCreator, eventMemberCount, polls, options, votes, onReload } = props;
+  const canCreatePoll = true;
 
-  // Controlled form state for creator poll inputs.
   const [question, setQuestion] = useState("");
   const [mode, setMode] = useState<"single" | "multi">("single");
   const [rawOptions, setRawOptions] = useState("Option 1\nOption 2");
   const [status, setStatus] = useState("");
-
-  // Cache voter profile rows keyed by user id so tooltip rendering is fast and stable.
+  const [busyPollId, setBusyPollId] = useState<string | null>(null);
   const [profilesById, setProfilesById] = useState<Map<string, ProfileRow>>(new Map());
 
-  /* ---------- data maps ---------- */
-
-  // Pre-group options by poll for efficient render loops.
   const optionsByPoll = useMemo(() => {
     const m = new Map<string, PollOptionRow[]>();
     for (const o of options) {
@@ -71,7 +65,6 @@ export default function PollsCard(props: {
     return m;
   }, [options]);
 
-  // Pre-group votes by poll to avoid repeated filtering for each card.
   const votesByPoll = useMemo(() => {
     const m = new Map<string, PollVoteRow[]>();
     for (const v of votes) {
@@ -82,7 +75,6 @@ export default function PollsCard(props: {
     return m;
   }, [votes]);
 
-  // Track only current-user votes per poll for quick selected-state checks.
   const myVotesByPoll = useMemo(() => {
     const m = new Map<string, Set<string>>();
     for (const v of votes) {
@@ -94,21 +86,18 @@ export default function PollsCard(props: {
     return m;
   }, [votes, meId]);
 
-  /* ---------- helpers ---------- */
-
-  // Defensive normalization: tolerate legacy/nullable mode values coming from DB.
   function normalizedMode(p: PollRow): "single" | "multi" {
     return (p.mode ?? "single").toLowerCase().includes("multi") ? "multi" : "single";
   }
 
-  // Count votes for one option; used to draw percentages and totals.
+  function isClosed(poll: PollRow) {
+    return !!poll.closed_at;
+  }
+
   function countVotes(pollId: string, optionId: string) {
     return (votesByPoll.get(pollId) ?? []).filter((v) => v.option_id === optionId).length;
   }
 
-  /* ---------- load voter profiles ---------- */
-
-  // Load profile names for all users who voted so the UI can show people, not opaque ids.
   async function loadVoterProfiles() {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
@@ -119,11 +108,7 @@ export default function PollsCard(props: {
       return;
     }
 
-    const res = await supabase
-      .from("profiles")
-      .select("id, first_name, last_name")
-      .in("id", ids);
-
+    const res = await supabase.from("profiles").select("id, first_name, last_name").in("id", ids);
     if (res.error) {
       console.error(res.error);
       return;
@@ -134,15 +119,11 @@ export default function PollsCard(props: {
     setProfilesById(map);
   }
 
-  // Re-fetch profile metadata whenever vote set changes.
   useEffect(() => {
     loadVoterProfiles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [votes]);
 
-  /* ---------- actions ---------- */
-
-  // Creates poll + options as two writes: poll first to get id, then options list.
   async function createPoll() {
     setStatus("");
     const q = question.trim();
@@ -168,10 +149,7 @@ export default function PollsCard(props: {
       return;
     }
 
-    const optionsInsert = await supabase.from("event_poll_options").insert(
-      lines.map((label) => ({ poll_id: p.data.id, label }))
-    );
-
+    const optionsInsert = await supabase.from("event_poll_options").insert(lines.map((label) => ({ poll_id: p.data.id, label })));
     if (optionsInsert.error) {
       setStatus(`❌ ${optionsInsert.error.message}`);
       return;
@@ -184,9 +162,12 @@ export default function PollsCard(props: {
     await onReload();
   }
 
-  // Toggles current user vote for one option.
-  // In single-choice mode we remove previous selection before inserting the new one.
   async function toggleVote(poll: PollRow, optionId: string) {
+    if (isClosed(poll)) {
+      setStatus("❌ This poll is closed.");
+      return;
+    }
+
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
 
@@ -195,25 +176,13 @@ export default function PollsCard(props: {
     const already = mySet.has(optionId);
 
     if (already) {
-      await supabase
-        .from("event_poll_votes")
-        .delete()
-        .eq("event_id", eventId)
-        .eq("poll_id", poll.id)
-        .eq("option_id", optionId)
-        .eq("user_id", meId);
-
+      await supabase.from("event_poll_votes").delete().eq("event_id", eventId).eq("poll_id", poll.id).eq("option_id", optionId).eq("user_id", meId);
       await onReload();
       return;
     }
 
     if (pollMode === "single") {
-      await supabase
-        .from("event_poll_votes")
-        .delete()
-        .eq("event_id", eventId)
-        .eq("poll_id", poll.id)
-        .eq("user_id", meId);
+      await supabase.from("event_poll_votes").delete().eq("event_id", eventId).eq("poll_id", poll.id).eq("user_id", meId);
     }
 
     await supabase.from("event_poll_votes").insert({
@@ -226,24 +195,90 @@ export default function PollsCard(props: {
     await onReload();
   }
 
-  /* ---------- UI ---------- */
+  function canManagePoll(poll: PollRow) {
+    return isCreator || poll.created_by === meId;
+  }
 
-  // UI composition: creation panel (creator only) + existing polls with vote controls.
+  async function closePoll(pollId: string) {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    setStatus("");
+    setBusyPollId(pollId);
+
+    const res = await supabase.from("event_polls").update({ closed_at: new Date().toISOString() }).eq("id", pollId).eq("event_id", eventId);
+
+    setBusyPollId(null);
+    if (res.error) {
+      setStatus(`❌ ${res.error.message}`);
+      return;
+    }
+
+    setStatus("✅ Poll closed");
+    await onReload();
+  }
+
+  async function reopenPoll(pollId: string) {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    setStatus("");
+    setBusyPollId(pollId);
+
+    const res = await supabase.from("event_polls").update({ closed_at: null }).eq("id", pollId).eq("event_id", eventId);
+
+    setBusyPollId(null);
+    if (res.error) {
+      setStatus(`❌ ${res.error.message}`);
+      return;
+    }
+
+    setStatus("✅ Poll reopened");
+    await onReload();
+  }
+
+  async function deletePoll(pollId: string) {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    setStatus("");
+    setBusyPollId(pollId);
+
+    const votesRes = await supabase.from("event_poll_votes").delete().eq("event_id", eventId).eq("poll_id", pollId);
+    if (votesRes.error) {
+      setBusyPollId(null);
+      setStatus(`❌ ${votesRes.error.message}`);
+      return;
+    }
+
+    const optionsRes = await supabase.from("event_poll_options").delete().eq("poll_id", pollId);
+    if (optionsRes.error) {
+      setBusyPollId(null);
+      setStatus(`❌ ${optionsRes.error.message}`);
+      return;
+    }
+
+    const pollRes = await supabase.from("event_polls").delete().eq("id", pollId).eq("event_id", eventId);
+    setBusyPollId(null);
+    if (pollRes.error) {
+      setStatus(`❌ ${pollRes.error.message}`);
+      return;
+    }
+
+    setStatus("✅ Poll deleted");
+    await onReload();
+  }
+
   return (
     <div style={card}>
       <h2>Polls</h2>
 
-      {/* Creation form is intentionally creator-only to avoid duplicate/competing poll definitions. */}
-      {isCreator && (
+      {canCreatePoll && (
         <div style={{ ...pollBox, marginBottom: 12 }}>
           <div style={{ fontWeight: 900, marginBottom: 8 }}>Create new poll</div>
+          <div style={{ fontSize: 13, opacity: 0.78 }}>Anyone in the event can create a poll. Poll creators and the event creator can close or delete their polls.</div>
           <div style={{ display: "grid", gap: 8 }}>
-            <input
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder="Question"
-              style={inputStyle}
-            />
+            <input value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="Question" style={inputStyle} />
 
             <select value={mode} onChange={(e) => setMode(e.target.value as "single" | "multi")} style={inputStyle}>
               <option value="single">Single choice</option>
@@ -263,26 +298,53 @@ export default function PollsCard(props: {
         </div>
       )}
 
-      {/* Existing polls list; each option button doubles as vote toggle. */}
       <div style={{ display: "grid", gap: 12 }}>
+        {polls.length === 0 && <div style={{ color: "rgba(229,231,235,0.75)" }}>No polls yet.</div>}
+
         {polls.map((p) => {
           const opts = optionsByPoll.get(p.id) ?? [];
           const mySet = myVotesByPoll.get(p.id) ?? new Set<string>();
           const votedPeopleCount = new Set((votesByPoll.get(p.id) ?? []).map((v) => v.user_id)).size;
+          const closed = isClosed(p);
+          const disableActions = busyPollId === p.id;
+          const canManage = canManagePoll(p);
 
           return (
-            <div key={p.id} style={pollBox}>
-              <div style={{ fontWeight: 900 }}>{p.question}</div>
-              <div style={{ fontSize: 13, opacity: 0.8, marginTop: 4 }}>
-                {votedPeopleCount}/{eventMemberCount} people voted
+            <div key={p.id} style={{ ...pollBox, opacity: disableActions ? 0.8 : 1 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontWeight: 900 }}>{p.question}</div>
+                  <div style={{ fontSize: 13, opacity: 0.8, marginTop: 4 }}>
+                    {votedPeopleCount}/{eventMemberCount} people voted
+                    {closed ? ` • Closed ${new Date(p.closed_at!).toLocaleString()}` : " • Open"}
+                  </div>
+                  <div style={{ fontSize: 12, opacity: 0.68, marginTop: 4 }}>
+                    {canManage ? "You can manage this poll." : "Only the poll creator or event creator can manage this poll."}
+                  </div>
+                </div>
+
+                {canManage && (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {closed ? (
+                      <button onClick={() => reopenPoll(p.id)} style={btnSecondary} disabled={disableActions}>
+                        Reopen
+                      </button>
+                    ) : (
+                      <button onClick={() => closePoll(p.id)} style={btnSecondary} disabled={disableActions}>
+                        Close poll
+                      </button>
+                    )}
+                    <button onClick={() => deletePoll(p.id)} style={btnDanger} disabled={disableActions}>
+                      Delete poll
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
                 {opts.map((o) => {
                   const selected = mySet.has(o.id);
                   const c = countVotes(p.id, o.id);
-
-                  // Resolve profile rows for voters on this option to display social proof under labels.
                   const voters = (votesByPoll.get(p.id) ?? [])
                     .filter((v) => v.option_id === o.id)
                     .map((v) => profilesById.get(v.user_id))
@@ -292,8 +354,11 @@ export default function PollsCard(props: {
                     <button
                       key={o.id}
                       onClick={() => toggleVote(p, o.id)}
+                      disabled={closed}
                       style={{
                         ...optBtn,
+                        opacity: closed ? 0.7 : 1,
+                        cursor: closed ? "not-allowed" : "pointer",
                         background: selected ? "rgba(167,139,250,0.16)" : "rgba(255,255,255,0.05)",
                       }}
                     >
@@ -324,9 +389,6 @@ export default function PollsCard(props: {
   );
 }
 
-/* ---------- styles ---------- */
-
-// Outer card that visually matches other dashboard panels on the event page.
 const card: React.CSSProperties = {
   borderRadius: 18,
   padding: 18,
@@ -335,7 +397,6 @@ const card: React.CSSProperties = {
   color: "#e5e7eb",
 };
 
-// Individual poll container used for both create and display blocks.
 const pollBox: React.CSSProperties = {
   borderRadius: 16,
   padding: 14,
@@ -343,7 +404,6 @@ const pollBox: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
 };
 
-// Vote option rendered as a full-width button for easy touch interaction on mobile.
 const optBtn: React.CSSProperties = {
   width: "100%",
   padding: 12,
@@ -351,10 +411,8 @@ const optBtn: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.12)",
   background: "rgba(255,255,255,0.05)",
   color: "#e5e7eb",
-  cursor: "pointer",
 };
 
-// Shared form field styling for question/mode/options inputs.
 const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "10px 12px",
@@ -365,7 +423,6 @@ const inputStyle: React.CSSProperties = {
   outline: "none",
 };
 
-// High-emphasis action style for creating a new poll.
 const createBtn: React.CSSProperties = {
   padding: "10px 12px",
   borderRadius: 12,
@@ -373,5 +430,25 @@ const createBtn: React.CSSProperties = {
   background: "linear-gradient(90deg,#60a5fa,#a78bfa)",
   color: "#0b1020",
   fontWeight: 900,
+  cursor: "pointer",
+};
+
+const btnSecondary: React.CSSProperties = {
+  padding: "9px 12px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(255,255,255,0.08)",
+  color: "#e5e7eb",
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const btnDanger: React.CSSProperties = {
+  padding: "9px 12px",
+  borderRadius: 12,
+  border: "1px solid rgba(248,113,113,0.32)",
+  background: "rgba(127,29,29,0.35)",
+  color: "#fecaca",
+  fontWeight: 800,
   cursor: "pointer",
 };

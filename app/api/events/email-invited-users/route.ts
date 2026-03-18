@@ -10,7 +10,18 @@ type EmailInvitedUsersRequest = {
   description?: string | null;
   inviteLink?: string;
   recipientEmails?: string[];
+  subject?: string;
+  message?: string;
 };
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&#39;");
+}
 
 function formatDateRange(startsAt?: string | null, endsAt?: string | null) {
   if (!startsAt) return "Time: not specified";
@@ -47,27 +58,27 @@ export async function POST(req: Request) {
     );
   }
 
-  const subject = `Reminder: ${body.eventTitle}`;
-  const lines = [
+  const defaultMessage = [
     `You are invited to ${body.eventTitle}.`,
     body.eventType ? `Type: ${body.eventType}` : null,
     formatDateRange(body.startsAt, body.endsAt),
     body.location ? `Location: ${body.location}` : null,
     body.description ? `Details: ${body.description}` : null,
     `Join or review the event here: ${body.inviteLink}`,
-  ].filter(Boolean);
+  ]
+    .filter(Boolean)
+    .join("\n");
 
-  const textContent = lines.join("\n");
+  const subject = body.subject?.trim() || `Reminder: ${body.eventTitle}`;
+  const message = body.message?.trim() || defaultMessage;
+  const textContent = `${message}\n\nOpen event invitation: ${body.inviteLink}`;
   const htmlContent = `
     <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
-      <h2 style="margin-bottom: 12px;">${body.eventTitle}</h2>
-      <p>You are invited to this event.</p>
-      <ul>
-        ${body.eventType ? `<li><strong>Type:</strong> ${body.eventType}</li>` : ""}
-        <li><strong>${formatDateRange(body.startsAt, body.endsAt)}</strong></li>
-        ${body.location ? `<li><strong>Location:</strong> ${body.location}</li>` : ""}
-      </ul>
-      ${body.description ? `<p>${body.description}</p>` : ""}
+      <h2 style="margin-bottom: 12px;">${escapeHtml(subject)}</h2>
+      ${message
+        .split(/\n+/)
+        .map((line) => `<p>${escapeHtml(line)}</p>`)
+        .join("")}
       <p><a href="${body.inviteLink}">Open event invitation</a></p>
     </div>
   `;

@@ -146,6 +146,8 @@ export default function EventPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteStatus, setInviteStatus] = useState("");
   const [emailAllStatus, setEmailAllStatus] = useState("");
+  const [emailAllSubject, setEmailAllSubject] = useState("");
+  const [emailAllMessage, setEmailAllMessage] = useState("");
   const [pendingMyInvites, setPendingMyInvites] = useState(0);
 
   // Multi-invite selection
@@ -769,6 +771,35 @@ export default function EventPage() {
   }
 
   // Revokes a pending invite. Accepted invites are guarded by backend policies.
+  function buildEmailChangeTemplate() {
+    if (!event) return "";
+
+    const when = event.starts_at
+      ? `${new Date(event.starts_at).toLocaleString()}${event.ends_at ? ` - ${new Date(event.ends_at).toLocaleString()}` : ""}`
+      : "Time will be shared soon.";
+
+    return [
+      `Hello,`,
+      "",
+      `There is an important update for ${event.title}.`,
+      "The event date/time has been changed.",
+      `New schedule: ${when}`,
+      event.location ? `Location: ${event.location}` : null,
+      "",
+      "Please check the event page for the latest details.",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  function fillChangedDateTemplate() {
+    if (!event) return;
+
+    setEmailAllSubject(`Updated event schedule: ${event.title}`);
+    setEmailAllMessage(buildEmailChangeTemplate());
+    setEmailAllStatus("");
+  }
+
   async function emailAllInvitedUsers() {
     if (!event) return;
 
@@ -796,6 +827,8 @@ export default function EventPage() {
           description: event.description,
           inviteLink,
           recipientEmails,
+          subject: emailAllSubject.trim() || undefined,
+          message: emailAllMessage.trim() || undefined,
         }),
       });
 
@@ -1268,11 +1301,31 @@ export default function EventPage() {
                   <div style={{ ...cardInsetStyle, marginTop: 10 }}>
                     <div style={{ fontWeight: 900, marginBottom: 8 }}>Email all invited users</div>
                     <div style={{ color: "rgba(229,231,235,0.75)", fontSize: 13 }}>
-                      Sends an event reminder through your Brevo account to every invited email listed below.
+                      Write a custom message for invited users, for example when the event date or time changes.
                     </div>
+
+                    <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+                      <input
+                        value={emailAllSubject}
+                        onChange={(e) => setEmailAllSubject(e.target.value)}
+                        placeholder={`Subject (default: Reminder: ${event.title})`}
+                        style={inputStyle}
+                      />
+
+                      <textarea
+                        value={emailAllMessage}
+                        onChange={(e) => setEmailAllMessage(e.target.value)}
+                        placeholder="Write your email message here..."
+                        style={{ ...inputStyle, minHeight: 140, resize: "vertical" }}
+                      />
+                    </div>
+
                     <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                      <button onClick={fillChangedDateTemplate} style={btnGhost}>
+                        Use date/time change template
+                      </button>
                       <button onClick={emailAllInvitedUsers} style={btnPrimary}>
-                        Send email to invited users ({invites.length})
+                        Send custom email ({invites.length})
                       </button>
                     </div>
                     {emailAllStatus && <div style={statusBoxStyle(emailAllStatus.startsWith("✅"))}>{emailAllStatus}</div>}

@@ -1197,6 +1197,9 @@ export default function EventPage() {
               {isCreator && (
                 <div style={{ marginTop: 16 }}>
                   <h3 style={{ margin: 0 }}>Invites</h3>
+                  <div style={{ color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
+                    Use the buttons below to invite people and email everyone already invited.
+                  </div>
 
                   <div style={{ marginTop: 10, marginBottom: 14 }}>
                     <div style={{ fontWeight: 900, marginBottom: 8 }}>Invitation link</div>
@@ -1262,14 +1265,14 @@ export default function EventPage() {
 
                   <hr style={hrStyle} />
 
-                  <div style={{ marginTop: 10 }}>
+                  <div style={{ ...cardInsetStyle, marginTop: 10 }}>
                     <div style={{ fontWeight: 900, marginBottom: 8 }}>Email all invited users</div>
                     <div style={{ color: "rgba(229,231,235,0.75)", fontSize: 13 }}>
                       Sends an event reminder through your Brevo account to every invited email listed below.
                     </div>
                     <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
                       <button onClick={emailAllInvitedUsers} style={btnPrimary}>
-                        Email all invited ({invites.length})
+                        Send email to invited users ({invites.length})
                       </button>
                     </div>
                     {emailAllStatus && <div style={statusBoxStyle(emailAllStatus.startsWith("✅"))}>{emailAllStatus}</div>}
@@ -1978,3 +1981,10 @@ function statusBoxStyle(ok: boolean): React.CSSProperties {
     color: ok ? "#86efac" : "#fca5a5",
   };
 }
+
+const cardInsetStyle: React.CSSProperties = {
+  padding: 14,
+  borderRadius: 14,
+  background: "rgba(255,255,255,0.05)",
+  border: "1px solid rgba(255,255,255,0.10)",
+};

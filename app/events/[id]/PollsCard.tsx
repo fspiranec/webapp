@@ -46,6 +46,7 @@ export default function PollsCard(props: {
   onReload: () => Promise<void>;
 }) {
   const { eventId, meId, isCreator, eventMemberCount, polls, options, votes, onReload } = props;
+  const canCreatePoll = true;
 
   const [question, setQuestion] = useState("");
   const [mode, setMode] = useState<"single" | "multi">("single");
@@ -194,6 +195,10 @@ export default function PollsCard(props: {
     await onReload();
   }
 
+  function canManagePoll(poll: PollRow) {
+    return isCreator || poll.created_by === meId;
+  }
+
   async function closePoll(pollId: string) {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
@@ -268,9 +273,10 @@ export default function PollsCard(props: {
     <div style={card}>
       <h2>Polls</h2>
 
-      {isCreator && (
+      {canCreatePoll && (
         <div style={{ ...pollBox, marginBottom: 12 }}>
           <div style={{ fontWeight: 900, marginBottom: 8 }}>Create new poll</div>
+          <div style={{ fontSize: 13, opacity: 0.78 }}>Anyone in the event can create a poll. Poll creators and the event creator can close or delete their polls.</div>
           <div style={{ display: "grid", gap: 8 }}>
             <input value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="Question" style={inputStyle} />
 
@@ -301,6 +307,7 @@ export default function PollsCard(props: {
           const votedPeopleCount = new Set((votesByPoll.get(p.id) ?? []).map((v) => v.user_id)).size;
           const closed = isClosed(p);
           const disableActions = busyPollId === p.id;
+          const canManage = canManagePoll(p);
 
           return (
             <div key={p.id} style={{ ...pollBox, opacity: disableActions ? 0.8 : 1 }}>
@@ -311,9 +318,12 @@ export default function PollsCard(props: {
                     {votedPeopleCount}/{eventMemberCount} people voted
                     {closed ? ` • Closed ${new Date(p.closed_at!).toLocaleString()}` : " • Open"}
                   </div>
+                  <div style={{ fontSize: 12, opacity: 0.68, marginTop: 4 }}>
+                    {canManage ? "You can manage this poll." : "Only the poll creator or event creator can manage this poll."}
+                  </div>
                 </div>
 
-                {isCreator && (
+                {canManage && (
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {closed ? (
                       <button onClick={() => reopenPoll(p.id)} style={btnSecondary} disabled={disableActions}>

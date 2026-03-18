@@ -6,6 +6,8 @@ import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useIsMobile } from "@/lib/useIsMobile";
 import PollsCard from "./PollsCard";
 
+const EVENT_IMAGE_BUCKET = "event-images";
+
 /* ================= TYPES ================= */
 type PollRow = {
   id: string;
@@ -42,6 +44,7 @@ type EventRow = {
   location: string | null;
   description: string | null;
   surprise_mode: boolean;
+  cover_image_path: string | null;
 };
 
 type ItemRow = {
@@ -189,6 +192,12 @@ export default function EventPage() {
   const isBirthday = event?.type === "birthday";
   const inviteLink =
     typeof window !== "undefined" ? `${window.location.origin}/join/${eventId}` : `/join/${eventId}`;
+  const coverImageUrl = useMemo(() => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase || !event?.cover_image_path) return "";
+    return supabase.storage.from(EVENT_IMAGE_BUCKET).getPublicUrl(event.cover_image_path).data.publicUrl;
+  }, [event?.cover_image_path]);
+
 
   // Secret tasks are visible only to the event creator and the explicit assignee.
   // This keeps surprise/sensitive prep work private while preserving collaboration.
@@ -1125,7 +1134,8 @@ export default function EventPage() {
           {/* Event summary card: title, schedule, location, quick navigation links. */}
           <Card>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-              <div>
+              <div style={{ flex: 1, minWidth: 280 }}>
+                {coverImageUrl && <img src={coverImageUrl} alt={`${event.title} cover`} style={eventCoverStyle} />}
                 <h1 style={{ margin: 0 }}>{event.title}</h1>
                 <div style={{ color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
                   <b>{event.type}</b> {event.surprise_mode ? "• 🎁 surprise mode" : ""}
@@ -2039,5 +2049,15 @@ const cardInsetStyle: React.CSSProperties = {
   padding: 14,
   borderRadius: 14,
   background: "rgba(255,255,255,0.05)",
+  border: "1px solid rgba(255,255,255,0.10)",
+};
+
+
+const eventCoverStyle: React.CSSProperties = {
+  width: "100%",
+  maxHeight: 280,
+  objectFit: "cover",
+  borderRadius: 18,
+  marginBottom: 14,
   border: "1px solid rgba(255,255,255,0.10)",
 };

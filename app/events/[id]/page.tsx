@@ -14,6 +14,7 @@ type PollRow = {
   mode: "single" | "multi";
   created_by: string;
   created_at: string;
+  closed_at: string | null;
 };
 
 type PollOptionRow = {
@@ -144,6 +145,7 @@ export default function EventPage() {
   // Invites
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteStatus, setInviteStatus] = useState("");
+  const [emailAllStatus, setEmailAllStatus] = useState("");
   const [pendingMyInvites, setPendingMyInvites] = useState(0);
 
   // Multi-invite selection
@@ -258,6 +260,7 @@ export default function EventPage() {
     setStatus("");
     setInviteStatus("");
     setBulkStatus("");
+    setEmailAllStatus("");
     setDeleteStatus("");
     setLeaveStatus("");
     setChatStatus("");
@@ -394,7 +397,7 @@ export default function EventPage() {
     // ===== POLLS (inside loadAll) =====
     const p = await supabase
       .from("event_polls")
-      .select("id,event_id,question,mode,created_by,created_at")
+      .select("id,event_id,question,mode,created_by,created_at,closed_at")
       .eq("event_id", eventId)
       .order("created_at", { ascending: false });
 
@@ -766,6 +769,48 @@ export default function EventPage() {
   }
 
   // Revokes a pending invite. Accepted invites are guarded by backend policies.
+  async function emailAllInvitedUsers() {
+    if (!event) return;
+
+    setEmailAllStatus("");
+
+    const recipientEmails = Array.from(new Set(invites.map((inv) => inv.email.trim().toLowerCase()).filter(Boolean)));
+    if (recipientEmails.length === 0) {
+      setEmailAllStatus("❌ No invited users to email");
+      return;
+    }
+
+    setEmailAllStatus("Sending email…");
+
+    try {
+      const response = await fetch("/api/events/email-invited-users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventId,
+          eventTitle: event.title,
+          eventType: event.type,
+          startsAt: event.starts_at,
+          endsAt: event.ends_at,
+          location: event.location,
+          description: event.description,
+          inviteLink,
+          recipientEmails,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as { error?: string; sent?: number } | null;
+      if (!response.ok) {
+        setEmailAllStatus(`❌ ${payload?.error ?? "Failed to send email"}`);
+        return;
+      }
+
+      setEmailAllStatus(`✅ Email sent to ${payload?.sent ?? recipientEmails.length} invited user(s)`);
+    } catch (error) {
+      setEmailAllStatus(`❌ ${error instanceof Error ? error.message : "Failed to send email"}`);
+    }
+  }
+
   async function uninvite(inviteId: string) {
     setInviteStatus("");
     const supabase = getSupabaseBrowserClient();
@@ -1213,6 +1258,21 @@ export default function EventPage() {
                     </div>
 
                     {bulkStatus && <div style={statusBoxStyle(bulkStatus.startsWith("✅"))}>{bulkStatus}</div>}
+                  </div>
+
+                  <hr style={hrStyle} />
+
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ fontWeight: 900, marginBottom: 8 }}>Email all invited users</div>
+                    <div style={{ color: "rgba(229,231,235,0.75)", fontSize: 13 }}>
+                      Sends an event reminder through your Brevo account to every invited email listed below.
+                    </div>
+                    <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                      <button onClick={emailAllInvitedUsers} style={btnPrimary}>
+                        Email all invited ({invites.length})
+                      </button>
+                    </div>
+                    {emailAllStatus && <div style={statusBoxStyle(emailAllStatus.startsWith("✅"))}>{emailAllStatus}</div>}
                   </div>
 
                   <hr style={hrStyle} />

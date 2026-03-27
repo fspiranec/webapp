@@ -167,6 +167,7 @@ export default function EventPage() {
   // Chat
   const [chatTab, setChatTab] = useState<"general" | "secret">("general");
   const [organizerTab, setOrganizerTab] = useState<"polls" | "event" | "invite" | "tasks">("polls");
+  const [organizerToolsExpanded, setOrganizerToolsExpanded] = useState(true);
   const [messages, setMessages] = useState<MsgRow[]>([]);
   const [msgText, setMsgText] = useState("");
   const [chatStatus, setChatStatus] = useState("");
@@ -242,6 +243,44 @@ export default function EventPage() {
     const ids = Object.keys(selectedFriendIds).filter((k) => selectedFriendIds[k]);
     return friends.filter((f) => ids.includes(f.id));
   }, [selectedFriendIds, friends]);
+
+  const compactPeopleRows = useMemo(() => {
+    const rows: Array<{
+      key: string;
+      label: string;
+      meta: string;
+      status: "Joined" | "Accepted invite" | "Pending invite";
+      priority: number;
+    }> = [];
+
+    const memberEmails = new Set<string>();
+    for (const m of members) {
+      if (m.email) memberEmails.add(m.email.toLowerCase());
+      rows.push({
+        key: `member-${m.user_id}`,
+        label: displayNameByUser(m.user_id, m.full_name, m.email),
+        meta: [m.email, m.user_id === event?.creator_id ? "creator" : "", m.user_id === me?.id ? "you" : ""]
+          .filter(Boolean)
+          .join(" • "),
+        status: "Joined",
+        priority: 0,
+      });
+    }
+
+    for (const inv of invites) {
+      const email = inv.email.toLowerCase();
+      if (memberEmails.has(email)) continue;
+      rows.push({
+        key: `invite-${inv.id}`,
+        label: inv.email,
+        meta: new Date(inv.created_at).toLocaleDateString(),
+        status: inv.accepted ? "Accepted invite" : "Pending invite",
+        priority: inv.accepted ? 1 : 2,
+      });
+    }
+
+    return rows.sort((a, b) => a.priority - b.priority || a.label.localeCompare(b.label));
+  }, [members, invites, event?.creator_id, me?.id]);
 
   // Resets bulk selection after a successful invite operation.
   function clearSelected() {
@@ -1129,9 +1168,8 @@ export default function EventPage() {
         <div style={topLayoutStyle}>
           {/* Event summary card: title, schedule, location, quick navigation links. */}
           <Card>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap" }}>
               <div style={{ flex: 1, minWidth: 280 }}>
-                {coverImageUrl && <img src={coverImageUrl} alt={`${event.title} cover`} style={eventCoverStyle} />}
                 <h1 style={{ margin: 0 }}>{event.title}</h1>
                 <div style={{ color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
                   <b>{event.type}</b> {event.surprise_mode ? "• 🎁 surprise mode" : ""}
@@ -1160,6 +1198,12 @@ export default function EventPage() {
                   </a>
                 </div>
               </div>
+
+              {coverImageUrl && (
+                <div style={eventCoverWrapStyle}>
+                  <img src={coverImageUrl} alt={`${event.title} cover`} style={eventCoverStyle} />
+                </div>
+              )}
             </div>
 
             {event.description && <p style={{ marginTop: 12, color: "rgba(229,231,235,0.85)" }}>{event.description}</p>}
@@ -1168,23 +1212,33 @@ export default function EventPage() {
 
         {isCreator && (
           <Card>
-            <h2 style={{ marginTop: 0 }}>Organizer tools</h2>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button onClick={() => setOrganizerTab("polls")} style={organizerTab === "polls" ? btnPrimary : btnGhost}>
-                Polls
-              </button>
-              <button onClick={() => setOrganizerTab("event")} style={organizerTab === "event" ? btnPrimary : btnGhost}>
-                Event details
-              </button>
-              <button onClick={() => setOrganizerTab("invite")} style={organizerTab === "invite" ? btnPrimary : btnGhost}>
-                Invite
-              </button>
-              <button onClick={() => setOrganizerTab("tasks")} style={organizerTab === "tasks" ? btnPrimary : btnGhost}>
-                Tasks
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <h2 style={{ margin: 0 }}>Organizer tools</h2>
+              <button onClick={() => setOrganizerToolsExpanded((s) => !s)} style={btnGhostSmall}>
+                {organizerToolsExpanded ? "Minimize" : "Expand"}
               </button>
             </div>
 
-            {organizerTab === "polls" && me && (
+            {organizerToolsExpanded && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <button onClick={() => setOrganizerTab("polls")} style={organizerTab === "polls" ? btnPrimary : btnGhost}>
+                    Polls
+                  </button>
+                  <button onClick={() => setOrganizerTab("event")} style={organizerTab === "event" ? btnPrimary : btnGhost}>
+                    Event details
+                  </button>
+                  <button onClick={() => setOrganizerTab("invite")} style={organizerTab === "invite" ? btnPrimary : btnGhost}>
+                    Invite
+                  </button>
+                  <button onClick={() => setOrganizerTab("tasks")} style={organizerTab === "tasks" ? btnPrimary : btnGhost}>
+                    Tasks
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {organizerToolsExpanded && organizerTab === "polls" && me && (
               <div style={{ marginTop: 12 }}>
                 <PollsCard
                   eventId={eventId}
@@ -1200,7 +1254,7 @@ export default function EventPage() {
               </div>
             )}
 
-            {organizerTab === "event" && (
+            {organizerToolsExpanded && organizerTab === "event" && (
               <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
                 <button onClick={() => router.push(`/events/${event.id}/edit`)} style={btnGhost}>
                   Edit event
@@ -1223,7 +1277,7 @@ export default function EventPage() {
               </div>
             )}
 
-            {organizerTab === "invite" && (
+            {organizerToolsExpanded && organizerTab === "invite" && (
               <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
                 <div>
                   <div style={{ fontWeight: 900, marginBottom: 8 }}>Invitation link</div>
@@ -1339,7 +1393,7 @@ export default function EventPage() {
               </div>
             )}
 
-            {organizerTab === "tasks" && (
+            {organizerToolsExpanded && organizerTab === "tasks" && (
               <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
                 <input
                   placeholder="Task title"
@@ -1449,27 +1503,26 @@ export default function EventPage() {
           <div style={columnStack}>
             {/* Membership panel: who joined and member-specific quick actions (leave for non-creators). */}
             <Card>
-              <h2 style={{ marginTop: 0 }}>People coming</h2>
+              <h2 style={{ marginTop: 0 }}>People ({compactPeopleRows.length})</h2>
               <div style={{ display: "grid", gap: 10 }}>
-                {members.length === 0 ? (
-                  <div style={{ color: "rgba(229,231,235,0.75)" }}>No members found.</div>
+                {compactPeopleRows.length === 0 ? (
+                  <div style={{ color: "rgba(229,231,235,0.75)" }}>No people yet.</div>
                 ) : (
-                  <details style={detailsStyle} open>
-                    <summary style={summaryStyle}>People list ({members.length})</summary>
-                    <div style={peopleListStyle}>
-                      {members.map((m) => (
-                        <div key={m.user_id} style={rowStyle}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 900 }}>
-                              {displayNameByUser(m.user_id, m.full_name, null)}
-                              {m.user_id === event.creator_id ? " (creator)" : ""}
-                              {m.user_id === me?.id ? " (you)" : ""}
-                            </div>
+                  <div style={peopleListStyle}>
+                    {compactPeopleRows.map((p) => (
+                      <div key={p.key} style={compactPersonRowStyle}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {p.label}
                           </div>
+                          {p.meta && (
+                            <div style={{ fontSize: 11, color: "rgba(229,231,235,0.65)", marginTop: 2 }}>{p.meta}</div>
+                          )}
                         </div>
-                      ))}
-                    </div>
-                  </details>
+                        <span style={compactStatusStyle(p.status)}>{p.status}</span>
+                      </div>
+                    ))}
+                  </div>
                 )}
 
                 {!isCreator && (
@@ -1479,24 +1532,6 @@ export default function EventPage() {
                     </button>
                     {leaveStatus && <div style={statusBoxStyle(leaveStatus.startsWith("✅"))}>{leaveStatus}</div>}
                   </div>
-                )}
-              </div>
-
-              <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
-                <h3 style={{ margin: 0 }}>Invited people</h3>
-                {invites.length === 0 ? (
-                  <div style={{ color: "rgba(229,231,235,0.75)" }}>No invites yet.</div>
-                ) : (
-                  invites.map((inv) => (
-                    <div key={inv.id} style={rowStyle}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 900 }}>{inv.email}</div>
-                        <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
-                          Status: {inv.accepted ? "Accepted" : "Pending"} • {new Date(inv.created_at).toLocaleString()}
-                        </div>
-                      </div>
-                    </div>
-                  ))
                 )}
               </div>
             </Card>
@@ -1884,27 +1919,23 @@ const columnStack: React.CSSProperties = {
   gap: 14,
 };
 
-const detailsStyle: React.CSSProperties = {
-  borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "rgba(255,255,255,0.05)",
-  padding: 10,
-};
-
 const peopleListStyle: React.CSSProperties = {
   display: "grid",
-  gap: 10,
-  marginTop: 12,
-  maxHeight: 320,
+  gap: 8,
+  marginTop: 6,
+  maxHeight: 360,
   overflowY: "auto",
   paddingRight: 2,
 };
 
-const summaryStyle: React.CSSProperties = {
-  cursor: "pointer",
-  fontWeight: 800,
-  color: "#e5e7eb",
-  listStyle: "none",
+const compactPersonRowStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  alignItems: "center",
+  padding: "8px 10px",
+  borderRadius: 12,
+  background: "rgba(255,255,255,0.04)",
+  border: "1px solid rgba(255,255,255,0.08)",
 };
 
 // Scrollable chat transcript container with bounded height so input controls stay visible.
@@ -2049,11 +2080,29 @@ const cardInsetStyle: React.CSSProperties = {
 };
 
 
+const eventCoverWrapStyle: React.CSSProperties = {
+  width: 320,
+  maxWidth: "100%",
+  flexShrink: 0,
+};
+
 const eventCoverStyle: React.CSSProperties = {
   width: "100%",
-  maxHeight: 280,
+  height: 210,
   objectFit: "cover",
   borderRadius: 18,
-  marginBottom: 14,
   border: "1px solid rgba(255,255,255,0.10)",
 };
+
+function compactStatusStyle(status: "Joined" | "Accepted invite" | "Pending invite"): React.CSSProperties {
+  const color = status === "Joined" ? "#86efac" : status === "Accepted invite" ? "#93c5fd" : "#fcd34d";
+  return {
+    fontSize: 11,
+    padding: "3px 8px",
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.12)",
+    color,
+    background: "rgba(0,0,0,0.15)",
+    whiteSpace: "nowrap",
+  };
+}

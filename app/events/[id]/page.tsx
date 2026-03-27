@@ -1142,11 +1142,12 @@ export default function EventPage() {
           ← Back to events
         </Link>
 
-        {/* Top area: event metadata plus creator-only destructive controls. */}
-        <div style={topLayoutStyle}>
-          {/* Event summary card: title, schedule, location, quick navigation links. */}
-          <Card>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap" }}>
+        <div style={mainSectionStackStyle}>
+          {/* Top area: event metadata plus creator-only destructive controls. */}
+          <div style={topLayoutStyle}>
+            {/* Event summary card: title, schedule, location, quick navigation links. */}
+            <Card>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap" }}>
               <div style={{ flex: 1, minWidth: 280 }}>
                 <h1 style={{ margin: 0 }}>{event.title}</h1>
                 <div style={{ color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
@@ -1187,11 +1188,11 @@ export default function EventPage() {
                   <img src={coverImageUrl} alt={`${event.title} cover`} style={eventCoverStyle} />
                 </div>
               )}
-            </div>
+              </div>
 
-            {event.description && <p style={{ marginTop: 12, color: "rgba(229,231,235,0.85)" }}>{event.description}</p>}
-          </Card>
-        </div>
+              {event.description && <p style={{ marginTop: 12, color: "rgba(229,231,235,0.85)" }}>{event.description}</p>}
+            </Card>
+          </div>
 
         {isCreator && (
           <Card>
@@ -1566,6 +1567,7 @@ export default function EventPage() {
             {chatStatus && <div style={statusBoxStyle(chatStatus.startsWith("✅"))}>{chatStatus}</div>}
           </div>
         </Card>
+        </div>
       </div>
     </div>
   );
@@ -1646,7 +1648,6 @@ function Card({ children }: { children: React.ReactNode }) {
         background: "rgba(255,255,255,0.06)",
         border: "1px solid rgba(255,255,255,0.10)",
         boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
-        marginTop: 16,
       }}
     >
       {children}
@@ -1734,6 +1735,12 @@ const twoColumnLayout: React.CSSProperties = {
   gap: 16,
   gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
   alignItems: "start",
+};
+
+const mainSectionStackStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 16,
+  marginTop: 16,
 };
 
 // Vertical stack used inside each main grid column.

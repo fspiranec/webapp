@@ -98,3 +98,32 @@ export function Stack({
   );
 }
 
+export function StatusBanner({
+  tone,
+  children,
+  style,
+}: {
+  tone: "success" | "error" | "info";
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+}) {
+  const toneColor =
+    tone === "success" ? "#86efac" : tone === "error" ? "#fca5a5" : "rgba(229,231,235,0.9)";
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      style={{
+        padding: 12,
+        borderRadius: 12,
+        background: "rgba(255,255,255,0.06)",
+        border: "1px solid rgba(255,255,255,0.12)",
+        color: toneColor,
+        ...style,
+      }}
+    >
+      {children}
+    </div>
+  );
+}

@@ -44,9 +44,26 @@ export default function PollsCard(props: {
   options: PollOptionRow[];
   votes: PollVoteRow[];
   onReload: () => Promise<void>;
+  title?: string;
+  showCreatePoll?: boolean;
+  showManagementActions?: boolean;
+  activeOnly?: boolean;
 }) {
-  const { eventId, meId, isCreator, eventMemberCount, polls, options, votes, onReload } = props;
-  const canCreatePoll = true;
+  const {
+    eventId,
+    meId,
+    isCreator,
+    eventMemberCount,
+    polls,
+    options,
+    votes,
+    onReload,
+    title = "Polls",
+    showCreatePoll = true,
+    showManagementActions = true,
+    activeOnly = false,
+  } = props;
+  const canCreatePoll = showCreatePoll;
 
   const [question, setQuestion] = useState("");
   const [mode, setMode] = useState<"single" | "multi">("single");
@@ -232,7 +249,7 @@ export default function PollsCard(props: {
 
   return (
     <div style={card}>
-      <h2>Polls</h2>
+      <h2>{title}</h2>
 
       {canCreatePoll && (
         <div style={{ ...pollBox, marginBottom: 12 }}>
@@ -260,9 +277,13 @@ export default function PollsCard(props: {
       )}
 
       <div style={{ display: "grid", gap: 12 }}>
-        {polls.length === 0 && <div style={{ color: "rgba(229,231,235,0.75)" }}>No polls yet.</div>}
+        {polls.filter((p) => (activeOnly ? !isClosed(p) : true)).length === 0 && (
+          <div style={{ color: "rgba(229,231,235,0.75)" }}>{activeOnly ? "No active polls." : "No polls yet."}</div>
+        )}
 
-        {polls.map((p) => {
+        {polls
+          .filter((p) => (activeOnly ? !isClosed(p) : true))
+          .map((p) => {
           const opts = optionsByPoll.get(p.id) ?? [];
           const mySet = myVotesByPoll.get(p.id) ?? new Set<string>();
           const votedPeopleCount = new Set((votesByPoll.get(p.id) ?? []).map((v) => v.user_id)).size;
@@ -284,7 +305,7 @@ export default function PollsCard(props: {
                   </div>
                 </div>
 
-                {canManage && (
+                {showManagementActions && canManage && (
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {closed ? (
                       <button onClick={() => reopenPoll(p.id)} style={btnSecondary} disabled={disableActions}>
@@ -344,7 +365,7 @@ export default function PollsCard(props: {
               </div>
             </div>
           );
-        })}
+          })}
       </div>
     </div>
   );

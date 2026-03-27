@@ -166,6 +166,8 @@ export default function EventPage() {
 
   // Chat
   const [chatTab, setChatTab] = useState<"general" | "secret">("general");
+  const [organizerTab, setOrganizerTab] = useState<"polls" | "event" | "invite" | "tasks">("polls");
+  const [organizerToolsExpanded, setOrganizerToolsExpanded] = useState(true);
   const [messages, setMessages] = useState<MsgRow[]>([]);
   const [msgText, setMsgText] = useState("");
   const [chatStatus, setChatStatus] = useState("");
@@ -208,11 +210,6 @@ export default function EventPage() {
     return false;
   }
 
-  // Only the creator can edit task metadata (title/assignee/visibility) to avoid conflicting edits.
-  function canUpdateTask(task: TaskRow) {
-    return !!isCreator;
-  }
-
   // Status changes are allowed for both creator and assignee because completion progress
   // is usually updated by the person doing the work.
   function canChangeTaskStatus(task: TaskRow) {
@@ -246,6 +243,44 @@ export default function EventPage() {
     const ids = Object.keys(selectedFriendIds).filter((k) => selectedFriendIds[k]);
     return friends.filter((f) => ids.includes(f.id));
   }, [selectedFriendIds, friends]);
+
+  const compactPeopleRows = useMemo(() => {
+    const rows: Array<{
+      key: string;
+      label: string;
+      meta: string;
+      status: "Joined" | "Accepted invite" | "Pending invite";
+      priority: number;
+    }> = [];
+
+    const memberEmails = new Set<string>();
+    for (const m of members) {
+      if (m.email) memberEmails.add(m.email.toLowerCase());
+      rows.push({
+        key: `member-${m.user_id}`,
+        label: displayNameByUser(m.user_id, m.full_name, m.email),
+        meta: [m.email, m.user_id === event?.creator_id ? "creator" : "", m.user_id === me?.id ? "you" : ""]
+          .filter(Boolean)
+          .join(" • "),
+        status: "Joined",
+        priority: 0,
+      });
+    }
+
+    for (const inv of invites) {
+      const email = inv.email.toLowerCase();
+      if (memberEmails.has(email)) continue;
+      rows.push({
+        key: `invite-${inv.id}`,
+        label: inv.email,
+        meta: new Date(inv.created_at).toLocaleDateString(),
+        status: inv.accepted ? "Accepted invite" : "Pending invite",
+        priority: inv.accepted ? 1 : 2,
+      });
+    }
+
+    return rows.sort((a, b) => a.priority - b.priority || a.label.localeCompare(b.label));
+  }, [members, invites, event?.creator_id, me?.id]);
 
   // Resets bulk selection after a successful invite operation.
   function clearSelected() {
@@ -1133,9 +1168,8 @@ export default function EventPage() {
         <div style={topLayoutStyle}>
           {/* Event summary card: title, schedule, location, quick navigation links. */}
           <Card>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap" }}>
               <div style={{ flex: 1, minWidth: 280 }}>
-                {coverImageUrl && <img src={coverImageUrl} alt={`${event.title} cover`} style={eventCoverStyle} />}
                 <h1 style={{ margin: 0 }}>{event.title}</h1>
                 <div style={{ color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
                   <b>{event.type}</b> {event.surprise_mode ? "• 🎁 surprise mode" : ""}
@@ -1163,67 +1197,332 @@ export default function EventPage() {
                     Invites{pendingMyInvites > 0 ? ` (${pendingMyInvites}) 🔔` : ""}
                   </a>
                 </div>
-                {isCreator && (
-                  <div style={{ marginTop: 10 }}>
-                    <button onClick={() => router.push(`/events/${event.id}/edit`)} style={btnGhost}>
-                      Edit event
-                    </button>
-                  </div>
-                )}
               </div>
+
+              {coverImageUrl && (
+                <div style={eventCoverWrapStyle}>
+                  <img src={coverImageUrl} alt={`${event.title} cover`} style={eventCoverStyle} />
+                </div>
+              )}
             </div>
 
             {event.description && <p style={{ marginTop: 12, color: "rgba(229,231,235,0.85)" }}>{event.description}</p>}
           </Card>
-
-          {isCreator && (
-            /* Danger zone intentionally isolated so destructive actions are visually separated. */
-            <Card>
-              <h2 style={{ marginTop: 0, color: "#fecaca" }}>Danger zone</h2>
-              <p style={{ color: "rgba(229,231,235,0.75)" }}>Delete event (requires your password).</p>
-
-              <input
-                type="password"
-                value={deletePw}
-                onChange={(e) => setDeletePw(e.target.value)}
-                placeholder="Your password"
-                style={inputStyle}
-              />
-              <button onClick={deleteEventWithPassword} style={btnDanger}>
-                Delete event permanently
-              </button>
-
-              {deleteStatus && <div style={statusBoxStyle(deleteStatus.startsWith("✅"))}>{deleteStatus}</div>}
-            </Card>
-          )}
         </div>
+
+        {isCreator && (
+          <Card>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <h2 style={{ margin: 0 }}>Organizer tools</h2>
+              <button onClick={() => setOrganizerToolsExpanded((s) => !s)} style={btnGhostSmall}>
+                {organizerToolsExpanded ? "Minimize" : "Expand"}
+              </button>
+            </div>
+
+            {organizerToolsExpanded && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <button onClick={() => setOrganizerTab("polls")} style={organizerTab === "polls" ? btnPrimary : btnGhost}>
+                    Polls
+                  </button>
+                  <button onClick={() => setOrganizerTab("event")} style={organizerTab === "event" ? btnPrimary : btnGhost}>
+                    Event details
+                  </button>
+                  <button onClick={() => setOrganizerTab("invite")} style={organizerTab === "invite" ? btnPrimary : btnGhost}>
+                    Invite
+                  </button>
+                  <button onClick={() => setOrganizerTab("tasks")} style={organizerTab === "tasks" ? btnPrimary : btnGhost}>
+                    Tasks
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {organizerToolsExpanded && organizerTab === "polls" && me && (
+              <div style={{ marginTop: 12 }}>
+                <PollsCard
+                  eventId={eventId}
+                  meId={me.id}
+                  isCreator={!!isCreator}
+                  eventMemberCount={members.length}
+                  polls={polls}
+                  options={pollOptions}
+                  votes={pollVotes}
+                  onReload={loadAll}
+                  title="Manage polls"
+                />
+              </div>
+            )}
+
+            {organizerToolsExpanded && organizerTab === "event" && (
+              <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
+                <button onClick={() => router.push(`/events/${event.id}/edit`)} style={btnGhost}>
+                  Edit event
+                </button>
+                <div style={{ ...cardInsetStyle, border: "1px solid rgba(252,165,165,0.3)" }}>
+                  <h3 style={{ marginTop: 0, color: "#fecaca" }}>Delete event</h3>
+                  <p style={{ color: "rgba(229,231,235,0.75)" }}>Delete event (requires your password).</p>
+                  <input
+                    type="password"
+                    value={deletePw}
+                    onChange={(e) => setDeletePw(e.target.value)}
+                    placeholder="Your password"
+                    style={inputStyle}
+                  />
+                  <button onClick={deleteEventWithPassword} style={btnDanger}>
+                    Delete event permanently
+                  </button>
+                  {deleteStatus && <div style={statusBoxStyle(deleteStatus.startsWith("✅"))}>{deleteStatus}</div>}
+                </div>
+              </div>
+            )}
+
+            {organizerToolsExpanded && organizerTab === "invite" && (
+              <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
+                <div>
+                  <div style={{ fontWeight: 900, marginBottom: 8 }}>Invitation link</div>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <input value={inviteLink} readOnly style={inputStyle} />
+                    <button
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(inviteLink);
+                        setInviteStatus("✅ Invitation link copied");
+                      }}
+                      style={btnGhost}
+                    >
+                      Copy link
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontWeight: 900, marginBottom: 8 }}>Invite multiple friends</div>
+                  {friends.length === 0 ? (
+                    <div style={{ color: "rgba(229,231,235,0.75)" }}>
+                      No friends yet. Add them in{" "}
+                      <a href="/profile" style={navLink}>
+                        /profile
+                      </a>
+                      .
+                    </div>
+                  ) : (
+                    <select
+                      multiple
+                      value={selectedFriends.map((f) => f.id)}
+                      onChange={(e) => {
+                        const ids = Array.from(e.target.selectedOptions)
+                          .map((opt) => opt.value)
+                          .filter(Boolean);
+                        setSelectedFriendIdsFromSelect(ids);
+                      }}
+                      style={{ ...inputStyle, minHeight: 140 }}
+                    >
+                      {friends.map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.friend_name ? `${f.friend_name} — ${f.friend_email}` : f.friend_email}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                    <button onClick={inviteSelectedFriends} style={btnPrimary}>
+                      Invite selected ({selectedFriends.length})
+                    </button>
+                    <button onClick={clearSelected} style={btnGhost}>
+                      Clear selection
+                    </button>
+                  </div>
+                  {bulkStatus && <div style={statusBoxStyle(bulkStatus.startsWith("✅"))}>{bulkStatus}</div>}
+                </div>
+
+                <div style={{ ...cardInsetStyle }}>
+                  <div style={{ fontWeight: 900, marginBottom: 8 }}>Email all invited users</div>
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <input
+                      value={emailAllSubject}
+                      onChange={(e) => setEmailAllSubject(e.target.value)}
+                      placeholder={`Subject (default: Reminder: ${event.title})`}
+                      style={inputStyle}
+                    />
+                    <textarea
+                      value={emailAllMessage}
+                      onChange={(e) => setEmailAllMessage(e.target.value)}
+                      placeholder="Write your email message here..."
+                      style={{ ...inputStyle, minHeight: 120, resize: "vertical" }}
+                    />
+                  </div>
+                  <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                    <button onClick={fillChangedDateTemplate} style={btnGhost}>
+                      Use date/time change template
+                    </button>
+                    <button onClick={emailAllInvitedUsers} style={btnPrimary}>
+                      Send custom email ({invites.length})
+                    </button>
+                  </div>
+                  {emailAllStatus && <div style={statusBoxStyle(emailAllStatus.startsWith("✅"))}>{emailAllStatus}</div>}
+                </div>
+
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <input
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="friend@email.com"
+                    style={inputStyle}
+                  />
+                  <button onClick={sendSingleInvite} style={btnPrimary}>
+                    Send invite
+                  </button>
+                </div>
+                {inviteStatus && <div style={statusBoxStyle(inviteStatus.startsWith("✅"))}>{inviteStatus}</div>}
+
+                <div style={{ display: "grid", gap: 10 }}>
+                  {invites.map((inv) => (
+                    <div key={inv.id} style={rowStyle}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 900 }}>{inv.email}</div>
+                        <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
+                          {inv.accepted ? "✅ Accepted" : "Pending"} • {new Date(inv.created_at).toLocaleString()}
+                        </div>
+                      </div>
+                      <button style={btnDangerSmall} onClick={() => uninvite(inv.id)}>
+                        Uninvite
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {organizerToolsExpanded && organizerTab === "tasks" && (
+              <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+                <input
+                  placeholder="Task title"
+                  value={taskTitle}
+                  onChange={(e) => setTaskTitle(e.target.value)}
+                  style={inputStyle}
+                />
+                <textarea
+                  placeholder="Task description"
+                  value={taskDescription}
+                  onChange={(e) => setTaskDescription(e.target.value)}
+                  style={{ ...inputStyle, minHeight: 90, resize: "vertical" as const }}
+                />
+                <select value={taskAssigneeId} onChange={(e) => setTaskAssigneeId(e.target.value)} style={inputStyle}>
+                  <option value="">Assign to…</option>
+                  {members.map((m) => (
+                    <option key={m.user_id} value={m.user_id}>
+                      {displayNameByUser(m.user_id, m.full_name, null)}
+                    </option>
+                  ))}
+                </select>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <select
+                    value={taskVisibility}
+                    onChange={(e) => setTaskVisibility(e.target.value as "public" | "secret")}
+                    style={inputStyle}
+                  >
+                    <option value="public">Public</option>
+                    <option value="secret">Secret</option>
+                  </select>
+                  <select
+                    value={taskStatus}
+                    onChange={(e) => setTaskStatus(e.target.value as "todo" | "in_progress" | "done")}
+                    style={inputStyle}
+                  >
+                    <option value="todo">To do</option>
+                    <option value="in_progress">In progress</option>
+                    <option value="done">Done</option>
+                  </select>
+                </div>
+                <button onClick={createTask} disabled={!taskTitle.trim()} style={primaryBtnStyle(!taskTitle.trim())}>
+                  + Add task
+                </button>
+
+                <div style={{ marginTop: 8, display: "grid", gap: 10 }}>
+                  {tasks.filter(canViewTask).map((task) => {
+                    const editing = editTaskId === task.id;
+                    return (
+                      <div key={task.id} style={rowStyle}>
+                        <div style={{ flex: 1 }}>
+                          {editing ? (
+                            <div style={{ display: "grid", gap: 8 }}>
+                              <input value={editTaskTitle} onChange={(e) => setEditTaskTitle(e.target.value)} style={inputStyle} />
+                              <textarea
+                                value={editTaskDescription}
+                                onChange={(e) => setEditTaskDescription(e.target.value)}
+                                style={{ ...inputStyle, minHeight: 90, resize: "vertical" as const }}
+                              />
+                              <select value={editTaskAssigneeId} onChange={(e) => setEditTaskAssigneeId(e.target.value)} style={inputStyle}>
+                                <option value="">Assign to…</option>
+                                {members.map((m) => (
+                                  <option key={m.user_id} value={m.user_id}>
+                                    {displayNameByUser(m.user_id, m.full_name, null)}
+                                  </option>
+                                ))}
+                              </select>
+                              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                                <select value={editTaskVisibility} onChange={(e) => setEditTaskVisibility(e.target.value as "public" | "secret")} style={inputStyle}>
+                                  <option value="public">Public</option>
+                                  <option value="secret">Secret</option>
+                                </select>
+                                <select value={editTaskStatus} onChange={(e) => setEditTaskStatus(e.target.value as "todo" | "in_progress" | "done")} style={inputStyle}>
+                                  <option value="todo">To do</option>
+                                  <option value="in_progress">In progress</option>
+                                  <option value="done">Done</option>
+                                </select>
+                              </div>
+                              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                                <button onClick={saveTaskEdit} style={btnPrimary}>Save</button>
+                                <button onClick={cancelTaskEdit} style={btnGhost}>Cancel</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <b>{task.title}</b>
+                              <div style={{ marginTop: 6, color: "rgba(229,231,235,0.75)" }}>{task.description || "No description"}</div>
+                            </>
+                          )}
+                        </div>
+                        {!editing && (
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <button onClick={() => startTaskEdit(task)} style={btnGhostSmall}>Edit</button>
+                            <button onClick={() => deleteTask(task.id)} style={btnDangerSmall}>Delete</button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
 
         {/* ✅ AUTO-FIT grid: becomes 1 col on mobile, 2/3/4 on bigger screens */}
         <div style={twoColumnLayoutStyle}>
           <div style={columnStack}>
             {/* Membership panel: who joined and member-specific quick actions (leave for non-creators). */}
             <Card>
-              <h2 style={{ marginTop: 0 }}>People coming</h2>
+              <h2 style={{ marginTop: 0 }}>People ({compactPeopleRows.length})</h2>
               <div style={{ display: "grid", gap: 10 }}>
-                {members.length === 0 ? (
-                  <div style={{ color: "rgba(229,231,235,0.75)" }}>No members found.</div>
+                {compactPeopleRows.length === 0 ? (
+                  <div style={{ color: "rgba(229,231,235,0.75)" }}>No people yet.</div>
                 ) : (
-                  <details style={detailsStyle} open>
-                    <summary style={summaryStyle}>People list ({members.length})</summary>
-                    <div style={peopleListStyle}>
-                      {members.map((m) => (
-                        <div key={m.user_id} style={rowStyle}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 900 }}>
-                              {displayNameByUser(m.user_id, m.full_name, null)}
-                              {m.user_id === event.creator_id ? " (creator)" : ""}
-                              {m.user_id === me?.id ? " (you)" : ""}
-                            </div>
+                  <div style={peopleListStyle}>
+                    {compactPeopleRows.map((p) => (
+                      <div key={p.key} style={compactPersonRowStyle}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {p.label}
                           </div>
+                          {p.meta && (
+                            <div style={{ fontSize: 11, color: "rgba(229,231,235,0.65)", marginTop: 2 }}>{p.meta}</div>
+                          )}
                         </div>
-                      ))}
-                    </div>
-                  </details>
+                        <span style={compactStatusStyle(p.status)}>{p.status}</span>
+                      </div>
+                    ))}
+                  </div>
                 )}
 
                 {!isCreator && (
@@ -1235,164 +1534,6 @@ export default function EventPage() {
                   </div>
                 )}
               </div>
-
-              {/* Invitation panel: link sharing, direct email invites, and friend-based bulk invites. */}
-              {isCreator && (
-                <div style={{ marginTop: 16 }}>
-                  <h3 style={{ margin: 0 }}>Invites</h3>
-                  <div style={{ color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
-                    Use the buttons below to invite people and email everyone already invited.
-                  </div>
-
-                  <div style={{ marginTop: 10, marginBottom: 14 }}>
-                    <div style={{ fontWeight: 900, marginBottom: 8 }}>Invitation link</div>
-                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                      <input value={inviteLink} readOnly style={inputStyle} />
-                      <button
-                        onClick={async () => {
-                          await navigator.clipboard.writeText(inviteLink);
-                          setInviteStatus("✅ Invitation link copied");
-                        }}
-                        style={btnGhost}
-                      >
-                        Copy link
-                      </button>
-                    </div>
-                    <div style={{ fontSize: 12, color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
-                      People with this link can sign in/sign up and join this event instantly.
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: 10 }}>
-                    <div style={{ fontWeight: 900, marginBottom: 8 }}>Invite multiple friends</div>
-
-                    {friends.length === 0 ? (
-                      <div style={{ color: "rgba(229,231,235,0.75)" }}>
-                        No friends yet. Add them in{" "}
-                        <a href="/profile" style={navLink}>
-                          /profile
-                        </a>
-                        .
-                      </div>
-                    ) : (
-                      <select
-                        multiple
-                        value={selectedFriends.map((f) => f.id)}
-                        onChange={(e) => {
-                          const ids = Array.from(e.target.selectedOptions)
-                            .map((opt) => opt.value)
-                            .filter(Boolean);
-                          setSelectedFriendIdsFromSelect(ids);
-                        }}
-                        style={{ ...inputStyle, minHeight: 140 }}
-                      >
-                        {friends.map((f) => (
-                          <option key={f.id} value={f.id}>
-                            {f.friend_name ? `${f.friend_name} — ${f.friend_email}` : f.friend_email}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-
-                    <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
-                      <button onClick={inviteSelectedFriends} style={btnPrimary}>
-                        Invite selected ({selectedFriends.length})
-                      </button>
-                      <button onClick={clearSelected} style={btnGhost}>
-                        Clear selection
-                      </button>
-                    </div>
-
-                    {bulkStatus && <div style={statusBoxStyle(bulkStatus.startsWith("✅"))}>{bulkStatus}</div>}
-                  </div>
-
-                  <hr style={hrStyle} />
-
-                  <div style={{ ...cardInsetStyle, marginTop: 10 }}>
-                    <div style={{ fontWeight: 900, marginBottom: 8 }}>Email all invited users</div>
-                    <div style={{ color: "rgba(229,231,235,0.75)", fontSize: 13 }}>
-                      Write a custom message for invited users, for example when the event date or time changes.
-                    </div>
-
-                    <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
-                      <input
-                        value={emailAllSubject}
-                        onChange={(e) => setEmailAllSubject(e.target.value)}
-                        placeholder={`Subject (default: Reminder: ${event.title})`}
-                        style={inputStyle}
-                      />
-
-                      <textarea
-                        value={emailAllMessage}
-                        onChange={(e) => setEmailAllMessage(e.target.value)}
-                        placeholder="Write your email message here..."
-                        style={{ ...inputStyle, minHeight: 140, resize: "vertical" }}
-                      />
-                    </div>
-
-                    <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
-                      <button onClick={fillChangedDateTemplate} style={btnGhost}>
-                        Use date/time change template
-                      </button>
-                      <button onClick={emailAllInvitedUsers} style={btnPrimary}>
-                        Send custom email ({invites.length})
-                      </button>
-                    </div>
-                    {emailAllStatus && <div style={statusBoxStyle(emailAllStatus.startsWith("✅"))}>{emailAllStatus}</div>}
-                  </div>
-
-                  <hr style={hrStyle} />
-
-                  <div style={{ display: "grid", gap: 10 }}>
-                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                      <input
-                        value={inviteEmail}
-                        onChange={(e) => setInviteEmail(e.target.value)}
-                        placeholder="friend@email.com"
-                        style={inputStyle}
-                      />
-                      <button onClick={sendSingleInvite} style={btnPrimary}>
-                        Send invite
-                      </button>
-                    </div>
-
-                    {inviteStatus && <div style={statusBoxStyle(inviteStatus.startsWith("✅"))}>{inviteStatus}</div>}
-                  </div>
-
-                  <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
-                    {invites.length === 0 ? (
-                      <div style={{ color: "rgba(229,231,235,0.75)" }}>No invites yet.</div>
-                    ) : (
-                      <details style={detailsStyle}>
-                        <summary style={summaryStyle}>Invited people ({invites.length})</summary>
-                        <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-                          {invites.map((inv) => (
-                            <div
-                              key={inv.id}
-                              style={{
-                                ...rowStyle,
-                                flexDirection: isMobile ? "column" : "row",
-                                alignItems: isMobile ? "flex-start" : "center",
-                              }}
-                            >
-                              <div style={{ flex: 1 }}>
-                                <div style={{ fontWeight: 900 }}>{inv.email}</div>
-                                <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
-                                  {inv.accepted ? "✅ Accepted" : "Pending"} • {new Date(inv.created_at).toLocaleString()}
-                                </div>
-                              </div>
-
-                              <button style={btnDangerSmall} onClick={() => uninvite(inv.id)}>
-                                Uninvite
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                    )}
-                  </div>
-                </div>
-              )}
             </Card>
           </div>
 
@@ -1409,68 +1550,26 @@ export default function EventPage() {
                 options={pollOptions}
                 votes={pollVotes}
                 onReload={loadAll}
+                title="Active polls"
+                showCreatePoll={false}
+                showManagementActions={false}
+                activeOnly
               />
             )}
 
-            {/* Task board with creator-only creation and role-aware editing/status controls. */}
+            {/* Active task list for quick status visibility on the main page. */}
             <Card>
-              <h2 style={{ marginTop: 0 }}>Tasks</h2>
-
-              {isCreator && (
-                <div style={{ display: "grid", gap: 10 }}>
-                  <input
-                    placeholder="Task title"
-                    value={taskTitle}
-                    onChange={(e) => setTaskTitle(e.target.value)}
-                    style={inputStyle}
-                  />
-                  <textarea
-                    placeholder="Task description"
-                    value={taskDescription}
-                    onChange={(e) => setTaskDescription(e.target.value)}
-                    style={{ ...inputStyle, minHeight: 90, resize: "vertical" as const }}
-                  />
-                  <select value={taskAssigneeId} onChange={(e) => setTaskAssigneeId(e.target.value)} style={inputStyle}>
-                    <option value="">Assign to…</option>
-                    {members.map((m) => (
-                      <option key={m.user_id} value={m.user_id}>
-                        {displayNameByUser(m.user_id, m.full_name, null)}
-                      </option>
-                    ))}
-                  </select>
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <select
-                      value={taskVisibility}
-                      onChange={(e) => setTaskVisibility(e.target.value as "public" | "secret")}
-                      style={inputStyle}
-                    >
-                      <option value="public">Public</option>
-                      <option value="secret">Secret</option>
-                    </select>
-                    <select
-                      value={taskStatus}
-                      onChange={(e) => setTaskStatus(e.target.value as "todo" | "in_progress" | "done")}
-                      style={inputStyle}
-                    >
-                      <option value="todo">To do</option>
-                      <option value="in_progress">In progress</option>
-                      <option value="done">Done</option>
-                    </select>
-                  </div>
-                  <button onClick={createTask} disabled={!taskTitle.trim()} style={primaryBtnStyle(!taskTitle.trim())}>
-                    + Add task
-                  </button>
-                </div>
-              )}
+              <h2 style={{ marginTop: 0 }}>Active tasks</h2>
 
               {taskStatusMsg && <div style={statusBoxStyle(taskStatusMsg.startsWith("✅"))}>{taskStatusMsg}</div>}
 
               <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-                {tasks.filter(canViewTask).length === 0 ? (
-                  <div style={{ color: "rgba(229,231,235,0.75)" }}>No tasks yet.</div>
+                {tasks.filter((task) => canViewTask(task) && task.status !== "done").length === 0 ? (
+                  <div style={{ color: "rgba(229,231,235,0.75)" }}>No active tasks.</div>
                 ) : (
-                  tasks.filter(canViewTask).map((task) => {
-                    const editing = editTaskId === task.id;
+                  tasks
+                    .filter((task) => canViewTask(task) && task.status !== "done")
+                    .map((task) => {
                     const assignee = task.assignee_id ? members.find((m) => m.user_id === task.assignee_id) : null;
 
                     return (
@@ -1483,114 +1582,46 @@ export default function EventPage() {
                         }}
                       >
                         <div style={{ flex: 1 }}>
-                          {editing ? (
-                            <div style={{ display: "grid", gap: 8 }}>
-                              <input
-                                value={editTaskTitle}
-                                onChange={(e) => setEditTaskTitle(e.target.value)}
-                                style={inputStyle}
-                              />
-                              <textarea
-                                value={editTaskDescription}
-                                onChange={(e) => setEditTaskDescription(e.target.value)}
-                                style={{ ...inputStyle, minHeight: 90, resize: "vertical" as const }}
-                              />
-                              <select
-                                value={editTaskAssigneeId}
-                                onChange={(e) => setEditTaskAssigneeId(e.target.value)}
-                                style={inputStyle}
-                              >
-                                <option value="">Assign to…</option>
-                                {members.map((m) => (
-                                  <option key={m.user_id} value={m.user_id}>
-                                    {displayNameByUser(m.user_id, m.full_name, null)}
-                                  </option>
-                                ))}
-                              </select>
-                              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                                <select
-                                  value={editTaskVisibility}
-                                  onChange={(e) => setEditTaskVisibility(e.target.value as "public" | "secret")}
-                                  style={inputStyle}
-                                >
-                                  <option value="public">Public</option>
-                                  <option value="secret">Secret</option>
-                                </select>
-                                <select
-                                  value={editTaskStatus}
-                                  onChange={(e) => setEditTaskStatus(e.target.value as "todo" | "in_progress" | "done")}
-                                  style={inputStyle}
-                                >
-                                  <option value="todo">To do</option>
-                                  <option value="in_progress">In progress</option>
-                                  <option value="done">Done</option>
-                                </select>
-                              </div>
-                              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                                <button onClick={saveTaskEdit} style={btnPrimary}>
-                                  Save
-                                </button>
-                                <button onClick={cancelTaskEdit} style={btnGhost}>
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <>
-                              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                                <b style={{ fontSize: 16 }}>{task.title}</b>
-                                <span style={pillStyle(taskStatusColor(task.status))}>
-                                  {task.status.replace("_", " ").toUpperCase()}
-                                </span>
-                                <span style={pillStyle(task.visibility === "secret" ? "#fca5a5" : "#93c5fd")}>
-                                  {task.visibility.toUpperCase()}
-                                </span>
-                              </div>
-                              {task.description && (
-                                <div style={{ marginTop: 6, color: "rgba(229,231,235,0.8)" }}>{task.description}</div>
-                              )}
-                              <div style={{ marginTop: 6, color: "rgba(229,231,235,0.7)", fontSize: 13 }}>
-                                {assignee
-                                  ? `Assigned to ${displayNameByUser(assignee.user_id, assignee.full_name, null)}`
-                                  : "Unassigned"}
-                              </div>
-                            </>
+                          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                            <b style={{ fontSize: 16 }}>{task.title}</b>
+                            <span style={pillStyle(taskStatusColor(task.status))}>
+                              {task.status.replace("_", " ").toUpperCase()}
+                            </span>
+                            <span style={pillStyle(task.visibility === "secret" ? "#fca5a5" : "#93c5fd")}>
+                              {task.visibility.toUpperCase()}
+                            </span>
+                          </div>
+                          {task.description && (
+                            <div style={{ marginTop: 6, color: "rgba(229,231,235,0.8)" }}>{task.description}</div>
                           )}
+                          <div style={{ marginTop: 6, color: "rgba(229,231,235,0.7)", fontSize: 13 }}>
+                            {assignee
+                              ? `Assigned to ${displayNameByUser(assignee.user_id, assignee.full_name, null)}`
+                              : "Unassigned"}
+                          </div>
                         </div>
 
-                        {!editing && (
-                          <div
-                            style={{
-                              ...itemActionRow,
-                              flexDirection: isMobile ? "column" : "row",
-                              alignItems: isMobile ? "stretch" : "center",
-                            }}
+                        <div
+                          style={{
+                            ...itemActionRow,
+                            flexDirection: isMobile ? "column" : "row",
+                            alignItems: isMobile ? "stretch" : "center",
+                          }}
+                        >
+                          <select
+                            value={task.status}
+                            onChange={(e) => updateTaskStatus(task, e.target.value as TaskRow["status"])}
+                            disabled={!canChangeTaskStatus(task)}
+                            style={inputStyle}
                           >
-                            <select
-                              value={task.status}
-                              onChange={(e) => updateTaskStatus(task, e.target.value as TaskRow["status"])}
-                              disabled={!canChangeTaskStatus(task)}
-                              style={inputStyle}
-                            >
-                              <option value="todo">To do</option>
-                              <option value="in_progress">In progress</option>
-                              <option value="done">Done</option>
-                            </select>
-                            {canUpdateTask(task) && (
-                              <>
-                                <button onClick={() => startTaskEdit(task)} style={btnGhostSmall}>
-                                  Edit
-                                </button>
-                                <button onClick={() => deleteTask(task.id)} style={btnDangerSmall}>
-                                  Delete
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        )}
+                            <option value="todo">To do</option>
+                            <option value="in_progress">In progress</option>
+                            <option value="done">Done</option>
+                          </select>
+                        </div>
                       </div>
                     );
-                  })
+                    })
                 )}
               </div>
             </Card>
@@ -1888,27 +1919,23 @@ const columnStack: React.CSSProperties = {
   gap: 14,
 };
 
-const detailsStyle: React.CSSProperties = {
-  borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "rgba(255,255,255,0.05)",
-  padding: 10,
-};
-
 const peopleListStyle: React.CSSProperties = {
   display: "grid",
-  gap: 10,
-  marginTop: 12,
-  maxHeight: 320,
+  gap: 8,
+  marginTop: 6,
+  maxHeight: 360,
   overflowY: "auto",
   paddingRight: 2,
 };
 
-const summaryStyle: React.CSSProperties = {
-  cursor: "pointer",
-  fontWeight: 800,
-  color: "#e5e7eb",
-  listStyle: "none",
+const compactPersonRowStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  alignItems: "center",
+  padding: "8px 10px",
+  borderRadius: 12,
+  background: "rgba(255,255,255,0.04)",
+  border: "1px solid rgba(255,255,255,0.08)",
 };
 
 // Scrollable chat transcript container with bounded height so input controls stay visible.
@@ -2053,11 +2080,29 @@ const cardInsetStyle: React.CSSProperties = {
 };
 
 
+const eventCoverWrapStyle: React.CSSProperties = {
+  width: 320,
+  maxWidth: "100%",
+  flexShrink: 0,
+};
+
 const eventCoverStyle: React.CSSProperties = {
   width: "100%",
-  maxHeight: 280,
+  height: 210,
   objectFit: "cover",
   borderRadius: 18,
-  marginBottom: 14,
   border: "1px solid rgba(255,255,255,0.10)",
 };
+
+function compactStatusStyle(status: "Joined" | "Accepted invite" | "Pending invite"): React.CSSProperties {
+  const color = status === "Joined" ? "#86efac" : status === "Accepted invite" ? "#93c5fd" : "#fcd34d";
+  return {
+    fontSize: 11,
+    padding: "3px 8px",
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.12)",
+    color,
+    background: "rgba(0,0,0,0.15)",
+    whiteSpace: "nowrap",
+  };
+}

@@ -128,3 +128,9 @@ Once Priorities 0–2 are underway, these are natural fits:
 5. **P4**: Upgrade loading/empty states.
 6. **P5**: A11y quick wins.
 7. Product add-ons (calendar/RSVP center/templates).
+
+## Supabase change impact for this refactor
+
+- For the organizer-panel extraction and lazy-loading work itself, **no new Supabase migration is required**.
+- The refactor only reorganizes front-end component boundaries and shared TypeScript types.
+- Supabase changes become necessary only when introducing new DB schema, RPC contracts, or authorization policies (for example: notification center tables, template presets, or server-enforced idempotency/audit logs for email reminders).

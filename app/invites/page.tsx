@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Button, Card, Stack, buttonStyle } from "@/components/ui/primitives";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { gradientPageBackground, spacing } from "@/lib/uiStyles";
 import { useIsMobile } from "@/lib/useIsMobile";
 
 type InviteRow = {
@@ -86,11 +88,11 @@ export default function InvitesPage() {
     return (
       <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
         <Card>
-          <div style={{ display: "grid", gap: 10 }}>
+          <Stack gap={10}>
             <div style={skeletonTitle} />
             <div style={skeletonRow} />
             <div style={skeletonRow} />
-          </div>
+          </Stack>
         </Card>
       </div>
     );
@@ -131,7 +133,7 @@ export default function InvitesPage() {
             </div>
           )}
 
-          <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
+          <Stack gap={10} style={{ marginTop: spacing.sm }}>
             {invites.length === 0 ? (
               <div style={{ color: "rgba(229,231,235,0.75)" }}>No invites yet.</div>
             ) : (
@@ -152,14 +154,14 @@ export default function InvitesPage() {
                   </div>
 
                   {!inv.accepted ? (
-                    <button onClick={() => accept(inv)} style={btnPrimary}>
+                    <Button variant="primary" onClick={() => accept(inv)}>
                       Accept
-                    </button>
+                    </Button>
                   ) : (
                     <Link
                       href={`/events/${inv.event_id}`}
                       style={{
-                        ...btnPrimary,
+                        ...buttonStyle("primary"),
                         textDecoration: "none",
                         display: "inline-block",
                         textAlign: "center",
@@ -171,33 +173,17 @@ export default function InvitesPage() {
                 </div>
               ))
             )}
-          </div>
+          </Stack>
         </Card>
       </div>
     </div>
   );
 }
 
-function Card({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        borderRadius: 18,
-        padding: 18,
-        background: "rgba(255,255,255,0.06)",
-        border: "1px solid rgba(255,255,255,0.10)",
-        boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
 const pageStyle: React.CSSProperties = {
   minHeight: "100vh",
-  background: "linear-gradient(180deg, #0b1020 0%, #0f172a 60%, #111827 100%)",
-  padding: 24,
+  background: gradientPageBackground,
+  padding: spacing.lg,
 };
 
 const rowStyle: React.CSSProperties = {
@@ -208,16 +194,6 @@ const rowStyle: React.CSSProperties = {
   borderRadius: 14,
   background: "rgba(255,255,255,0.05)",
   border: "1px solid rgba(255,255,255,0.10)",
-};
-
-const btnPrimary: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "linear-gradient(90deg,#60a5fa,#a78bfa)",
-  color: "#0b1020",
-  fontWeight: 900,
-  cursor: "pointer",
 };
 
 const skeletonTitle: React.CSSProperties = {

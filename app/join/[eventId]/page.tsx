@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import { Button, Card, Stack, StatusBanner } from "@/components/ui/primitives";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { gradientPageBackground, spacing } from "@/lib/uiStyles";
 
 type EventRow = {
   id: string;
@@ -80,31 +83,45 @@ export default function JoinByLinkPage() {
 
   return (
     <div style={pageStyle}>
-      <div style={cardStyle}>
+      <Card style={cardStyle}>
         <h1 style={{ marginTop: 0 }}>Join event</h1>
 
+        <p style={{ color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
+          Review details, then decide whether to join this event.
+        </p>
+
         {event ? (
-          <>
-            <div style={{ color: "rgba(229,231,235,0.85)", marginBottom: 14 }}>
+          <Stack gap={spacing.xs} style={{ marginTop: spacing.sm }}>
+            <div style={{ color: "rgba(229,231,235,0.85)" }}>
               You are invited to join <b>{event.title}</b> ({event.type}).
             </div>
-            <button onClick={joinNow} style={btnPrimary} disabled={joining}>
-              {joining ? "Joining…" : "Join now"}
-            </button>
-          </>
+            <Stack gap={spacing.xs} style={actionStack}>
+              <Button variant="primary" onClick={joinNow} disabled={joining} fullWidth>
+                {joining ? "Joining…" : "Join now"}
+              </Button>
+              <Link href="/events" style={{ ...btnSecondaryLink, width: "100%" }}>
+                Not now
+              </Link>
+            </Stack>
+          </Stack>
         ) : (
-          <>
-            <div style={{ color: "rgba(229,231,235,0.85)", marginBottom: 14 }}>{status}</div>
-            <button onClick={joinNow} style={btnPrimary} disabled={joining}>
+          <Stack gap={spacing.xs} style={{ marginTop: spacing.sm }}>
+            <div style={{ color: "rgba(229,231,235,0.85)" }}>{status}</div>
+            <Button variant="primary" onClick={joinNow} disabled={joining} fullWidth>
               {joining ? "Joining…" : "Join now"}
-            </button>
-          </>
+            </Button>
+          </Stack>
         )}
 
         {status && event ? (
-          <div style={{ ...statusBox, color: status.startsWith("✅") ? "#86efac" : "#fca5a5" }}>{status}</div>
+          <StatusBanner
+            tone={status.startsWith("✅") ? "success" : status.startsWith("❌") ? "error" : "info"}
+            style={statusBox}
+          >
+            {status}
+          </StatusBanner>
         ) : null}
-      </div>
+      </Card>
     </div>
   );
 }
@@ -113,8 +130,8 @@ const pageStyle: React.CSSProperties = {
   minHeight: "100vh",
   display: "grid",
   placeItems: "center",
-  padding: 24,
-  background: "linear-gradient(180deg, #0b1020 0%, #0f172a 60%, #111827 100%)",
+  padding: spacing.lg,
+  background: gradientPageBackground,
   color: "#e5e7eb",
   fontFamily: "system-ui",
 };
@@ -122,21 +139,22 @@ const pageStyle: React.CSSProperties = {
 const cardStyle: React.CSSProperties = {
   width: "100%",
   maxWidth: 520,
-  borderRadius: 18,
   padding: 18,
-  background: "rgba(255,255,255,0.06)",
-  border: "1px solid rgba(255,255,255,0.10)",
-  boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
 };
 
-const btnPrimary: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "linear-gradient(90deg,#60a5fa,#a78bfa)",
-  color: "#0b1020",
+const actionStack: React.CSSProperties = {
+  gridTemplateColumns: "1fr",
+};
+
+const btnSecondaryLink: React.CSSProperties = {
+  padding: "12px 14px",
+  borderRadius: 14,
+  border: "1px solid rgba(255,255,255,0.16)",
+  background: "rgba(255,255,255,0.06)",
+  color: "#e5e7eb",
+  textDecoration: "none",
   fontWeight: 900,
-  cursor: "pointer",
+  textAlign: "center",
 };
 
 const statusBox: React.CSSProperties = {

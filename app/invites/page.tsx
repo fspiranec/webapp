@@ -25,6 +25,7 @@ export default function InvitesPage() {
   const [userEmail, setUserEmail] = useState("");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
+  const [actingInviteId, setActingInviteId] = useState<string | null>(null);
 
   // Reads pending/accepted invite rows and keeps UI counters synchronized.
   async function load() {
@@ -62,26 +63,54 @@ export default function InvitesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function accept(inv: InviteRow) {
+  async function setRsvp(inv: InviteRow, nextRsvp: "accepted" | "maybe" | "declined") {
     setStatus("");
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
+    setActingInviteId(inv.id);
 
-    setStatus("Accepting…");
+    setStatus(nextRsvp === "accepted" ? "Accepting…" : "Saving RSVP…");
 
-    // ✅ One RPC does everything (accept + join/rejoin)
-    const { error } = await supabase.rpc("accept_event_invite", {
+    const { error: inviteErr } = await supabase.rpc("accept_event_invite", {
       invite_id: inv.id,
     });
 
-    if (error) {
-      setStatus(`❌ ${error.message}`);
+    if (inviteErr) {
+      setStatus(`❌ ${inviteErr.message}`);
+      setActingInviteId(null);
       return;
     }
 
-    setStatus("✅ Joined event!");
+    if (nextRsvp !== "accepted") {
+      const { data: sess } = await supabase.auth.getSession();
+      const userId = sess.session?.user.id;
+      if (userId) {
+        const { error: rsvpErr } = await supabase
+          .from("event_members")
+          .update({ rsvp: nextRsvp })
+          .eq("event_id", inv.event_id)
+          .eq("user_id", userId);
+        if (rsvpErr) {
+          setStatus(`⚠️ Joined, but RSVP update failed: ${rsvpErr.message}`);
+          setActingInviteId(null);
+          await load();
+          return;
+        }
+      }
+    }
+
+    setStatus(
+      nextRsvp === "accepted"
+        ? "✅ Joined event!"
+        : nextRsvp === "maybe"
+          ? "✅ RSVP saved as Maybe."
+          : "✅ RSVP saved as Can't attend."
+    );
     await load();
-    router.push(`/events/${inv.event_id}`);
+    setActingInviteId(null);
+    if (nextRsvp === "accepted" || nextRsvp === "maybe") {
+      router.push(`/events/${inv.event_id}`);
+    }
   }
 
   if (loading) {
@@ -154,9 +183,21 @@ export default function InvitesPage() {
                   </div>
 
                   {!inv.accepted ? (
-                    <Button variant="primary" onClick={() => accept(inv)}>
-                      Accept
-                    </Button>
+                    <div style={{ display: "grid", gap: 8, gridTemplateColumns: isMobile ? "1fr" : "repeat(3, auto)" }}>
+                      <Button
+                        variant="primary"
+                        onClick={() => setRsvp(inv, "accepted")}
+                        disabled={actingInviteId === inv.id}
+                      >
+                        {actingInviteId === inv.id ? "Saving..." : "Yes"}
+                      </Button>
+                      <Button onClick={() => setRsvp(inv, "maybe")} disabled={actingInviteId === inv.id}>
+                        Maybe
+                      </Button>
+                      <Button onClick={() => setRsvp(inv, "declined")} disabled={actingInviteId === inv.id}>
+                        No
+                      </Button>
+                    </div>
                   ) : (
                     <Link
                       href={`/events/${inv.event_id}`}

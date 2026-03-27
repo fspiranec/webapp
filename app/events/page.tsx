@@ -27,6 +27,7 @@ export default function EventsPage() {
   const [err, setErr] = useState("");
   const [pendingInvites, setPendingInvites] = useState(0);
   const [myOpenTasks, setMyOpenTasks] = useState(0);
+  const [openTaskEventId, setOpenTaskEventId] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -46,17 +47,32 @@ export default function EventsPage() {
       currentUserId = user.id;
       setEmail(user.email ?? "");
 
-      const [invitesCount, tasksCount, membershipRes] = await Promise.all([
+      async function refreshTaskSummary() {
+        const [tasksCount, firstOpenTask] = await Promise.all([
+          supabase
+            .from("event_tasks")
+            .select("id", { count: "exact", head: true })
+            .eq("assignee_id", currentUserId)
+            .neq("status", "done"),
+          supabase
+            .from("event_tasks")
+            .select("event_id")
+            .eq("assignee_id", currentUserId)
+            .neq("status", "done")
+            .order("created_at", { ascending: true })
+            .limit(1),
+        ]);
+
+        setMyOpenTasks(tasksCount.count ?? 0);
+        setOpenTaskEventId(firstOpenTask.data?.[0]?.event_id ?? null);
+      }
+
+      const [invitesCount, membershipRes] = await Promise.all([
         supabase
           .from("event_invites")
           .select("id", { count: "exact", head: true })
           .eq("accepted", false)
           .eq("email", currentEmail),
-        supabase
-          .from("event_tasks")
-          .select("id", { count: "exact", head: true })
-          .eq("assignee_id", currentUserId)
-          .neq("status", "done"),
         supabase
           .from("event_members")
           .select("event_id, events(id,title,type,starts_at,location,surprise_mode)")
@@ -64,7 +80,7 @@ export default function EventsPage() {
       ]);
 
       setPendingInvites(invitesCount.count ?? 0);
-      setMyOpenTasks(tasksCount.count ?? 0);
+      await refreshTaskSummary();
 
       const { data, error } = membershipRes;
 
@@ -90,22 +106,42 @@ export default function EventsPage() {
           .eq("email", currentEmail);
         setPendingInvites(countRes.count ?? 0);
         if (currentUserId) {
-          const taskRes = await supabase
-            .from("event_tasks")
-            .select("id", { count: "exact", head: true })
-            .eq("assignee_id", currentUserId)
-            .neq("status", "done");
+          const [taskRes, firstOpenTask] = await Promise.all([
+            supabase
+              .from("event_tasks")
+              .select("id", { count: "exact", head: true })
+              .eq("assignee_id", currentUserId)
+              .neq("status", "done"),
+            supabase
+              .from("event_tasks")
+              .select("event_id")
+              .eq("assignee_id", currentUserId)
+              .neq("status", "done")
+              .order("created_at", { ascending: true })
+              .limit(1),
+          ]);
           setMyOpenTasks(taskRes.count ?? 0);
+          setOpenTaskEventId(firstOpenTask.data?.[0]?.event_id ?? null);
         }
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "event_tasks" }, async () => {
         if (!currentUserId) return;
-        const taskRes = await supabase
-          .from("event_tasks")
-          .select("id", { count: "exact", head: true })
-          .eq("assignee_id", currentUserId)
-          .neq("status", "done");
+        const [taskRes, firstOpenTask] = await Promise.all([
+          supabase
+            .from("event_tasks")
+            .select("id", { count: "exact", head: true })
+            .eq("assignee_id", currentUserId)
+            .neq("status", "done"),
+          supabase
+            .from("event_tasks")
+            .select("event_id")
+            .eq("assignee_id", currentUserId)
+            .neq("status", "done")
+            .order("created_at", { ascending: true })
+            .limit(1),
+        ]);
         setMyOpenTasks(taskRes.count ?? 0);
+        setOpenTaskEventId(firstOpenTask.data?.[0]?.event_id ?? null);
       })
       .subscribe();
 
@@ -192,9 +228,18 @@ export default function EventsPage() {
                   Pending invites: <b>{pendingInvites}</b> • Open tasks assigned to you: <b>{myOpenTasks}</b>
                 </div>
               </div>
-              <Button style={headerActionButtonStyle(isMobile)} onClick={() => router.push("/invites")}>
-                Open invites
-              </Button>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Button style={headerActionButtonStyle(isMobile)} onClick={() => router.push("/invites")}>
+                  Open invites
+                </Button>
+                <Button
+                  style={headerActionButtonStyle(isMobile)}
+                  disabled={!openTaskEventId}
+                  onClick={() => openTaskEventId && router.push(`/events/${openTaskEventId}`)}
+                >
+                  Open tasks
+                </Button>
+              </div>
             </div>
 
             {events.length === 0 ? (

@@ -224,7 +224,7 @@ export default function PollsCard(props: {
 
   return (
     <div style={card}>
-      <h2>{title}</h2>
+      <h2 style={{ margin: "0 0 10px" }}>{title}</h2>
 
       {canCreatePoll && (
         <div style={{ ...pollBox, marginBottom: 12 }}>

@@ -249,38 +249,22 @@ export default function EventPage() {
       key: string;
       label: string;
       meta: string;
-      status: "Joined" | "Accepted invite" | "Pending invite";
-      priority: number;
+      status: "Confirmed";
     }> = [];
 
-    const memberEmails = new Set<string>();
     for (const m of members) {
-      if (m.email) memberEmails.add(m.email.toLowerCase());
       rows.push({
         key: `member-${m.user_id}`,
         label: displayNameByUser(m.user_id, m.full_name, m.email),
         meta: [m.email, m.user_id === event?.creator_id ? "creator" : "", m.user_id === me?.id ? "you" : ""]
           .filter(Boolean)
           .join(" • "),
-        status: "Joined",
-        priority: 0,
+        status: "Confirmed",
       });
     }
 
-    for (const inv of invites) {
-      const email = inv.email.toLowerCase();
-      if (memberEmails.has(email)) continue;
-      rows.push({
-        key: `invite-${inv.id}`,
-        label: inv.email,
-        meta: new Date(inv.created_at).toLocaleDateString(),
-        status: inv.accepted ? "Accepted invite" : "Pending invite",
-        priority: inv.accepted ? 1 : 2,
-      });
-    }
-
-    return rows.sort((a, b) => a.priority - b.priority || a.label.localeCompare(b.label));
-  }, [members, invites, event?.creator_id, me?.id]);
+    return rows.sort((a, b) => a.label.localeCompare(b.label));
+  }, [members, event?.creator_id, me?.id]);
 
   // Resets bulk selection after a successful invite operation.
   function clearSelected() {
@@ -1503,7 +1487,7 @@ export default function EventPage() {
           <div style={columnStack}>
             {/* Membership panel: who joined and member-specific quick actions (leave for non-creators). */}
             <Card>
-              <h2 style={{ marginTop: 0 }}>People ({compactPeopleRows.length})</h2>
+              <h2 style={{ marginTop: 0 }}>People arriving ({compactPeopleRows.length})</h2>
               <div style={{ display: "grid", gap: 10 }}>
                 {compactPeopleRows.length === 0 ? (
                   <div style={{ color: "rgba(229,231,235,0.75)" }}>No people yet.</div>
@@ -2094,8 +2078,8 @@ const eventCoverStyle: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
 };
 
-function compactStatusStyle(status: "Joined" | "Accepted invite" | "Pending invite"): React.CSSProperties {
-  const color = status === "Joined" ? "#86efac" : status === "Accepted invite" ? "#93c5fd" : "#fcd34d";
+function compactStatusStyle(status: "Confirmed"): React.CSSProperties {
+  const color = "#86efac";
   return {
     fontSize: 11,
     padding: "3px 8px",

@@ -16,9 +16,17 @@ export default function AuthCallbackPage() {
 
     (async () => {
       const nextPath = new URLSearchParams(window.location.search).get("next") || "/events";
+      const code = new URLSearchParams(window.location.search).get("code");
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error) {
+          router.replace("/login");
+          return;
+        }
+      }
 
-      const { data } = await supabase.auth.getUser();
-      const user = data.user;
+      const { data: sessionRes } = await supabase.auth.getSession();
+      const user = sessionRes.session?.user ?? null;
 
       if (user) {
         const fallbackName =

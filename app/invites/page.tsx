@@ -125,7 +125,11 @@ export default function InvitesPage() {
             </p>
           )}
 
-          {status && <div style={statusBoxStyle(status.startsWith("✅"))}>{status}</div>}
+          {status && (
+            <div role="status" aria-live="polite" style={statusBoxStyle(status.startsWith("✅"))}>
+              {status}
+            </div>
+          )}
 
           <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
             {invites.length === 0 ? (

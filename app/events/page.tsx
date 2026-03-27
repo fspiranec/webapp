@@ -24,6 +24,7 @@ export default function EventsPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [pendingInvites, setPendingInvites] = useState(0);
+  const [myOpenTasks, setMyOpenTasks] = useState(0);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -44,6 +45,13 @@ export default function EventsPage() {
         .eq("accepted", false)
         .eq("email", (user.email ?? "").toLowerCase());
       setPendingInvites(invitesCount.count ?? 0);
+
+      const tasksCount = await supabase
+        .from("event_tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("assignee_id", user.id)
+        .neq("status", "done");
+      setMyOpenTasks(tasksCount.count ?? 0);
 
       const { data, error } = await supabase
         .from("event_members")
@@ -66,6 +74,7 @@ export default function EventsPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "event_invites" }, async () => {
         const { data: sess2 } = await supabase.auth.getSession();
         const em = sess2.session?.user.email?.toLowerCase();
+        const uid = sess2.session?.user.id;
         if (!em) return;
         const countRes = await supabase
           .from("event_invites")
@@ -73,6 +82,25 @@ export default function EventsPage() {
           .eq("accepted", false)
           .eq("email", em);
         setPendingInvites(countRes.count ?? 0);
+        if (uid) {
+          const taskRes = await supabase
+            .from("event_tasks")
+            .select("id", { count: "exact", head: true })
+            .eq("assignee_id", uid)
+            .neq("status", "done");
+          setMyOpenTasks(taskRes.count ?? 0);
+        }
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "event_tasks" }, async () => {
+        const { data: sess3 } = await supabase.auth.getSession();
+        const uid = sess3.session?.user.id;
+        if (!uid) return;
+        const taskRes = await supabase
+          .from("event_tasks")
+          .select("id", { count: "exact", head: true })
+          .eq("assignee_id", uid)
+          .neq("status", "done");
+        setMyOpenTasks(taskRes.count ?? 0);
       })
       .subscribe();
 
@@ -136,9 +164,25 @@ export default function EventsPage() {
             </div>
           </div>
 
-          {err && <div style={statusBox(false)}>❌ {err}</div>}
+          {err && (
+            <div role="alert" aria-live="assertive" style={statusBox(false)}>
+              ❌ {err}
+            </div>
+          )}
 
           <div style={{ marginTop: 16, display: "grid", gap: 12 }}>
+            <div style={{ ...eventRow, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 900, fontSize: 16 }}>Notifications</div>
+                <div style={{ color: "rgba(229,231,235,0.75)", fontSize: 13, marginTop: 4 }}>
+                  Pending invites: <b>{pendingInvites}</b> • Open tasks assigned to you: <b>{myOpenTasks}</b>
+                </div>
+              </div>
+              <button style={btnGhost} onClick={() => router.push("/invites")}>
+                Open invites
+              </button>
+            </div>
+
             {events.length === 0 ? (
               <div style={{ color: "rgba(229,231,235,0.75)" }}>
                 No events yet. Create one!

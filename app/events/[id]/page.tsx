@@ -84,6 +84,7 @@ type MemberRow = {
   user_id: string;
   full_name: string | null;
   email: string | null;
+  rsvp: "accepted" | "maybe" | "declined" | null;
 };
 
 type MsgRow = {
@@ -164,6 +165,7 @@ export default function EventPage() {
 
   // Leave event
   const [leaveStatus, setLeaveStatus] = useState("");
+  const [rsvpStatus, setRsvpStatus] = useState("");
 
   // Chat
   const [chatTab, setChatTab] = useState<"general" | "secret">("general");
@@ -277,6 +279,11 @@ export default function EventPage() {
     return friends.filter((f) => ids.includes(f.id));
   }, [selectedFriendIds, friends]);
 
+  const myMember = useMemo(() => {
+    if (!me) return null;
+    return members.find((m) => m.user_id === me.id) ?? null;
+  }, [members, me]);
+
   const compactPeopleRows = useMemo(() => {
     const rows: Array<{
       key: string;
@@ -286,6 +293,7 @@ export default function EventPage() {
     }> = [];
 
     for (const m of members) {
+      if (m.rsvp && m.rsvp !== "accepted") continue;
       rows.push({
         key: `member-${m.user_id}`,
         label: displayNameByUser(m.user_id, m.full_name, m.email),
@@ -326,6 +334,7 @@ export default function EventPage() {
     setEmailAllStatus("");
     setDeleteStatus("");
     setLeaveStatus("");
+    setRsvpStatus("");
     setChatStatus("");
     setTaskStatusMsg("");
 
@@ -433,8 +442,9 @@ export default function EventPage() {
     });
 
     // Members list
-    const mem = await supabase.from("event_members").select("user_id").eq("event_id", eventId);
-    const memberIds = (mem.data ?? []).map((m: any) => m.user_id);
+    const mem = await supabase.from("event_members").select("user_id,rsvp").eq("event_id", eventId);
+    const memberRows = (mem.data ?? []) as Array<{ user_id: string; rsvp: "accepted" | "maybe" | "declined" | null }>;
+    const memberIds = memberRows.map((m) => m.user_id);
 
     const memberProfilesMap = new Map<string, { full_name: string | null; email: string | null }>();
     if (memberIds.length > 0) {
@@ -447,12 +457,14 @@ export default function EventPage() {
     }
 
     setMembers(
-      memberIds.map((uid: string) => {
+      memberRows.map((member) => {
+        const uid = member.user_id;
         const prof = memberProfilesMap.get(uid);
         return {
           user_id: uid,
           full_name: prof?.full_name ?? null,
           email: uid === user.id ? user.email ?? prof?.email ?? null : prof?.email ?? null,
+          rsvp: member.rsvp ?? "accepted",
         };
       })
     );
@@ -948,6 +960,26 @@ export default function EventPage() {
 
     setLeaveStatus("✅ Left event. Invite kept so you can rejoin from Invites.");
     router.push("/invites");
+  }
+
+  async function updateMyRsvp(nextRsvp: "accepted" | "maybe" | "declined") {
+    if (!me) return;
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    setRsvpStatus("Updating RSVP…");
+    const res = await supabase
+      .from("event_members")
+      .update({ rsvp: nextRsvp })
+      .eq("event_id", eventId)
+      .eq("user_id", me.id);
+
+    if (res.error) {
+      setRsvpStatus(`❌ ${res.error.message}`);
+      return;
+    }
+    setRsvpStatus("✅ RSVP updated");
+    await loadAll({ background: true });
   }
 
   /* ================= DELETE EVENT (creator + password required) ================= */
@@ -1539,6 +1571,9 @@ export default function EventPage() {
               isCreator={!!isCreator}
               onLeave={leaveEvent}
               leaveStatus={leaveStatus}
+              myRsvp={myMember?.rsvp ?? "accepted"}
+              onRsvpChange={updateMyRsvp}
+              rsvpStatus={rsvpStatus}
             />
           </div>
 
@@ -1824,11 +1859,17 @@ function PeoplePanel({
   isCreator,
   onLeave,
   leaveStatus,
+  myRsvp,
+  onRsvpChange,
+  rsvpStatus,
 }: {
   rows: Array<{ key: string; label: string; meta: string; status: "Confirmed" }>;
   isCreator: boolean;
   onLeave: () => void;
   leaveStatus: string;
+  myRsvp: "accepted" | "maybe" | "declined" | null;
+  onRsvpChange: (next: "accepted" | "maybe" | "declined") => void;
+  rsvpStatus: string;
 }) {
   return (
     <Card>
@@ -1854,6 +1895,17 @@ function PeoplePanel({
 
         {!isCreator && (
           <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)", marginBottom: 6 }}>Your RSVP</div>
+            <select
+              value={myRsvp ?? "accepted"}
+              onChange={(e) => onRsvpChange(e.target.value as "accepted" | "maybe" | "declined")}
+              style={inputStyle}
+            >
+              <option value="accepted">Accepted (I am coming)</option>
+              <option value="maybe">Maybe</option>
+              <option value="declined">Declined</option>
+            </select>
+            {rsvpStatus && <div style={statusBoxStyle(rsvpStatus.startsWith("✅"))}>{rsvpStatus}</div>}
             <button onClick={onLeave} style={btnDanger}>
               Leave event
             </button>

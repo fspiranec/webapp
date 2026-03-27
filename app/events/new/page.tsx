@@ -259,6 +259,8 @@ export default function NewEventPage() {
 
             {status && (
               <div
+                role="status"
+                aria-live="polite"
                 style={{
                   padding: 12,
                   borderRadius: 12,

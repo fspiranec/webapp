@@ -82,18 +82,48 @@ export default function NewEventPage() {
 
       const user = session.user;
       const userId = user.id;
+      const metadataFirstName =
+        (typeof user.user_metadata?.first_name === "string" && user.user_metadata.first_name.trim()) ||
+        (typeof user.user_metadata?.given_name === "string" && user.user_metadata.given_name.trim()) ||
+        null;
+      const metadataLastName =
+        (typeof user.user_metadata?.last_name === "string" && user.user_metadata.last_name.trim()) ||
+        (typeof user.user_metadata?.family_name === "string" && user.user_metadata.family_name.trim()) ||
+        null;
       const fallbackName =
         (typeof user.user_metadata?.full_name === "string" && user.user_metadata.full_name.trim()) ||
+        [metadataFirstName, metadataLastName].filter(Boolean).join(" ").trim() ||
         user.email ||
         "Unknown user";
 
       // ✅ Ensure profile exists (required because events.creator_id references profiles.id)
-      const { error: profErr } = await supabase.from("profiles").upsert({
+      const { data: existingProfile } = await supabase
+        .from("profiles")
+        .select("id,first_name,last_name,full_name")
+        .eq("id", userId)
+        .maybeSingle();
+
+      const profilePayload: {
+        id: string;
+        email: string | null;
+        avatar_url: string | null;
+        first_name?: string | null;
+        last_name?: string | null;
+        full_name?: string | null;
+      } = {
         id: userId,
-        full_name: fallbackName,
         email: user.email ?? null,
         avatar_url: null,
-      });
+      };
+
+      // Keep any user-edited names in DB; only seed metadata for brand-new profile rows.
+      if (!existingProfile) {
+        profilePayload.first_name = metadataFirstName;
+        profilePayload.last_name = metadataLastName;
+        profilePayload.full_name = fallbackName;
+      }
+
+      const { error: profErr } = await supabase.from("profiles").upsert(profilePayload);
       if (profErr) throw profErr;
 
       const surprise_mode = type === "birthday";

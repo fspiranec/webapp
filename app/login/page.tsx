@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useIsMobile } from "@/lib/useIsMobile";
@@ -16,12 +16,37 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState("");
   const [oauthLoading, setOauthLoading] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
 
   // Reads optional redirect target from query string; defaults to events hub for safe navigation.
   function getNextPath() {
     if (typeof window === "undefined") return "/events";
     return new URLSearchParams(window.location.search).get("next") || "/events";
   }
+
+  useEffect(() => {
+    if (!supabase) return;
+
+    let mounted = true;
+
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!mounted) return;
+      if (data.session) router.replace(getNextPath());
+    })();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return;
+      if (session && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")) {
+        router.replace(getNextPath());
+      }
+    });
+
+    return () => {
+      mounted = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, [router, supabase]);
 
   // Standard credential login with lightweight client-side validation for faster feedback.
   async function login() {
@@ -32,11 +57,17 @@ export default function LoginPage() {
     if (!cleanEmail.includes("@")) return setStatus("❌ Enter a valid email");
     if (!pw) return setStatus("❌ Enter your password");
     if (!supabase) return setStatus("❌ Supabase not ready");
+    if (passwordLoading || oauthLoading) return;
+
+    setPasswordLoading(true);
 
     setStatus("Signing in…");
     const res = await supabase.auth.signInWithPassword({ email: cleanEmail, password: pw });
 
-    if (res.error) return setStatus(`❌ ${res.error.message}`);
+    if (res.error) {
+      setPasswordLoading(false);
+      return setStatus(`❌ ${res.error.message}`);
+    }
 
     setStatus("✅ Signed in");
     router.push(getNextPath());
@@ -48,6 +79,7 @@ export default function LoginPage() {
     if (oauthLoading) return;
     if (!supabase) return setStatus("❌ Supabase not ready");
     setOauthLoading(true);
+    setPasswordLoading(false);
 
     setStatus("Redirecting to Google…");
     const { error } = await supabase.auth.signInWithOAuth({
@@ -91,8 +123,8 @@ export default function LoginPage() {
             autoComplete="current-password"
           />
 
-          <button onClick={login} style={btnPrimary}>
-            Sign in
+          <button onClick={login} style={btnPrimary} disabled={passwordLoading || oauthLoading}>
+            {passwordLoading ? "Signing in..." : "Sign in"}
           </button>
 
           <div style={dividerStyle}>
@@ -104,7 +136,7 @@ export default function LoginPage() {
                 type="button"
                 onClick={loginWithGoogle}
                 style={btnGoogle}
-                disabled={oauthLoading}
+                disabled={oauthLoading || passwordLoading}
             onMouseEnter={(e) => (e.currentTarget.style.background = "#f7f8f8")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "#ffffff")}
             onMouseDown={(e) => (e.currentTarget.style.background = "#eeeeee")}
@@ -116,6 +148,10 @@ export default function LoginPage() {
 
           <button type="button" onClick={() => router.push(`/register?next=${encodeURIComponent(getNextPath())}`)} style={btnGhost}>
             New user? Create account
+          </button>
+
+          <button type="button" onClick={() => router.push("/")} style={btnGhost}>
+            Back to home
           </button>
 
           {status ? <div role="status" aria-live="polite" style={statusBox(status.startsWith("✅"))}>{status}</div> : null}

@@ -32,12 +32,13 @@ export default function EventsPage() {
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
+    const client = supabase;
 
     let currentEmail = "";
     let currentUserId = "";
 
     (async () => {
-      const { data: sess } = await supabase.auth.getSession();
+      const { data: sess } = await client.auth.getSession();
       if (!sess.session) {
         router.replace("/login");
         return;
@@ -49,12 +50,12 @@ export default function EventsPage() {
 
       async function refreshTaskSummary() {
         const [tasksCount, firstOpenTask] = await Promise.all([
-          supabase
+          client
             .from("event_tasks")
             .select("id", { count: "exact", head: true })
             .eq("assignee_id", currentUserId)
             .neq("status", "done"),
-          supabase
+          client
             .from("event_tasks")
             .select("event_id")
             .eq("assignee_id", currentUserId)
@@ -68,12 +69,12 @@ export default function EventsPage() {
       }
 
       const [invitesCount, membershipRes] = await Promise.all([
-        supabase
+        client
           .from("event_invites")
           .select("id", { count: "exact", head: true })
           .eq("accepted", false)
           .eq("email", currentEmail),
-        supabase
+        client
           .from("event_members")
           .select("event_id, events(id,title,type,starts_at,location,surprise_mode)")
           .eq("user_id", currentUserId),
@@ -95,11 +96,11 @@ export default function EventsPage() {
       setLoading(false);
     })();
 
-    const invitesChannel = supabase
+    const invitesChannel = client
       .channel("events-page-invites")
       .on("postgres_changes", { event: "*", schema: "public", table: "event_invites" }, async () => {
         if (!currentEmail) return;
-        const countRes = await supabase
+        const countRes = await client
           .from("event_invites")
           .select("id", { count: "exact", head: true })
           .eq("accepted", false)
@@ -107,12 +108,12 @@ export default function EventsPage() {
         setPendingInvites(countRes.count ?? 0);
         if (currentUserId) {
           const [taskRes, firstOpenTask] = await Promise.all([
-            supabase
+            client
               .from("event_tasks")
               .select("id", { count: "exact", head: true })
               .eq("assignee_id", currentUserId)
               .neq("status", "done"),
-            supabase
+            client
               .from("event_tasks")
               .select("event_id")
               .eq("assignee_id", currentUserId)
@@ -127,12 +128,12 @@ export default function EventsPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "event_tasks" }, async () => {
         if (!currentUserId) return;
         const [taskRes, firstOpenTask] = await Promise.all([
-          supabase
+          client
             .from("event_tasks")
             .select("id", { count: "exact", head: true })
             .eq("assignee_id", currentUserId)
             .neq("status", "done"),
-          supabase
+          client
             .from("event_tasks")
             .select("event_id")
             .eq("assignee_id", currentUserId)
@@ -146,7 +147,7 @@ export default function EventsPage() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(invitesChannel);
+      client.removeChannel(invitesChannel);
     };
   }, [router]);
 

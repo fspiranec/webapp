@@ -1,7 +1,58 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 // Public landing page to explain value before auth and improve first-run UX.
 export default function Home() {
+  const router = useRouter();
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) {
+      setCheckingSession(false);
+      return;
+    }
+
+    let mounted = true;
+
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!mounted) return;
+
+      if (data.session) {
+        router.replace("/events");
+      } else {
+        setCheckingSession(false);
+      }
+    })();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return;
+      if (session && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")) {
+        router.replace("/events");
+      }
+    });
+
+    return () => {
+      mounted = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, [router]);
+
+  if (checkingSession) {
+    return (
+      <main style={pageStyle}>
+        <section style={heroCardStyle}>
+          <p style={subtitleStyle}>Checking your session…</p>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main style={pageStyle}>
       <section style={heroCardStyle}>

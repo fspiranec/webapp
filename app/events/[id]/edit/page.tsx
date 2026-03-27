@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useIsMobile } from "@/lib/useIsMobile";
 
@@ -192,7 +193,7 @@ export default function EditEventPage() {
     return (
       <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
         <div style={{ ...containerStyle, maxWidth: isMobile ? "100%" : 720 }}>
-          <a href={`/events/${eventId}`} style={linkStyle}>← Back to event</a>
+          <Link href={`/events/${eventId}`} style={linkStyle}>← Back to event</Link>
           <div style={cardStyle}>
             <p>Loading…</p>
           </div>
@@ -205,7 +206,7 @@ export default function EditEventPage() {
     return (
       <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
         <div style={{ ...containerStyle, maxWidth: isMobile ? "100%" : 720 }}>
-          <a href="/events" style={linkStyle}>← Back to events</a>
+          <Link href="/events" style={linkStyle}>← Back to events</Link>
           <div style={cardStyle}>
             <h2 style={{ margin: 0 }}>Event not found</h2>
             {status && <p style={{ color: "#fca5a5" }}>{status}</p>}
@@ -218,9 +219,9 @@ export default function EditEventPage() {
   return (
     <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
       <div style={{ ...containerStyle, maxWidth: isMobile ? "100%" : 720 }}>
-        <a href={`/events/${eventId}`} style={linkStyle}>
+        <Link href={`/events/${eventId}`} style={linkStyle}>
           ← Back to event
-        </a>
+        </Link>
 
         <div style={cardStyle}>
           <h1 style={{ margin: 0, fontSize: 28 }}>Edit event</h1>

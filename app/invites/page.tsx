@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useIsMobile } from "@/lib/useIsMobile";
 
@@ -19,6 +20,7 @@ export default function InvitesPage() {
   const router = useRouter();
   const isMobile = useIsMobile();
   const [invites, setInvites] = useState<InviteRow[]>([]);
+  const [userEmail, setUserEmail] = useState("");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -34,10 +36,13 @@ export default function InvitesPage() {
       router.replace("/login");
       return;
     }
+    const email = (sess.session.user.email ?? "").toLowerCase();
+    setUserEmail(email);
 
     const { data, error } = await supabase
       .from("event_invites")
       .select("id,event_id,email,accepted,created_at,events:events(id,title)")
+      .eq("email", email)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -77,7 +82,19 @@ export default function InvitesPage() {
     router.push(`/events/${inv.event_id}`);
   }
 
-  if (loading) return <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}><Card>Loading…</Card></div>;
+  if (loading) {
+    return (
+      <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
+        <Card>
+          <div style={{ display: "grid", gap: 10 }}>
+            <div style={skeletonTitle} />
+            <div style={skeletonRow} />
+            <div style={skeletonRow} />
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
@@ -93,15 +110,26 @@ export default function InvitesPage() {
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
             <h1 style={{ margin: 0 }}>Invites</h1>
             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <a href="/events" style={{ color: "#93c5fd", textDecoration: "none" }}>← Events</a>
+              <Link href="/events" style={{ color: "#93c5fd", textDecoration: "none" }}>
+                ← Events
+              </Link>
             </div>
           </div>
 
           <p style={{ marginTop: 8, color: "rgba(229,231,235,0.75)" }}>
             Accept invites sent to your email address.
           </p>
+          {userEmail && (
+            <p style={{ marginTop: 8, color: "rgba(229,231,235,0.65)", fontSize: 13 }}>
+              Showing invites for <b style={{ color: "#e5e7eb" }}>{userEmail}</b>
+            </p>
+          )}
 
-          {status && <div style={statusBoxStyle(status.startsWith("✅"))}>{status}</div>}
+          {status && (
+            <div role="status" aria-live="polite" style={statusBoxStyle(status.startsWith("✅"))}>
+              {status}
+            </div>
+          )}
 
           <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
             {invites.length === 0 ? (
@@ -128,7 +156,7 @@ export default function InvitesPage() {
                       Accept
                     </button>
                   ) : (
-                    <a
+                    <Link
                       href={`/events/${inv.event_id}`}
                       style={{
                         ...btnPrimary,
@@ -138,7 +166,7 @@ export default function InvitesPage() {
                       }}
                     >
                       Open
-                    </a>
+                    </Link>
                   )}
                 </div>
               ))
@@ -190,6 +218,19 @@ const btnPrimary: React.CSSProperties = {
   color: "#0b1020",
   fontWeight: 900,
   cursor: "pointer",
+};
+
+const skeletonTitle: React.CSSProperties = {
+  height: 24,
+  borderRadius: 10,
+  background: "rgba(255,255,255,0.12)",
+  width: "35%",
+};
+
+const skeletonRow: React.CSSProperties = {
+  height: 58,
+  borderRadius: 14,
+  background: "rgba(255,255,255,0.08)",
 };
 
 function statusBoxStyle(ok: boolean): React.CSSProperties {

@@ -15,6 +15,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState("");
+  const [oauthLoading, setOauthLoading] = useState(false);
 
   // Reads optional redirect target from query string; defaults to events hub for safe navigation.
   function getNextPath() {
@@ -44,7 +45,9 @@ export default function LoginPage() {
   // Starts OAuth redirect flow; Supabase returns user to callback route for profile synchronization.
   async function loginWithGoogle() {
     setStatus("");
+    if (oauthLoading) return;
     if (!supabase) return setStatus("❌ Supabase not ready");
+    setOauthLoading(true);
 
     setStatus("Redirecting to Google…");
     const { error } = await supabase.auth.signInWithOAuth({
@@ -55,6 +58,7 @@ export default function LoginPage() {
     });
 
     if (error) {
+      setOauthLoading(false);
       setStatus(`❌ ${error.message}`);
     }
   }
@@ -67,14 +71,18 @@ export default function LoginPage() {
         <div style={hintStyle}>Existing users login here.</div>
 
         <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+          <label htmlFor="login-email" style={srOnly}>Email</label>
           <input
+            id="login-email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Email"
             style={inputStyle}
             autoComplete="email"
           />
+          <label htmlFor="login-password" style={srOnly}>Password</label>
           <input
+            id="login-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Password"
@@ -92,23 +100,25 @@ export default function LoginPage() {
           </div>
 
           {/* ✅ Google styled button */}
-          <button
-            onClick={loginWithGoogle}
-            style={btnGoogle}
+              <button
+                type="button"
+                onClick={loginWithGoogle}
+                style={btnGoogle}
+                disabled={oauthLoading}
             onMouseEnter={(e) => (e.currentTarget.style.background = "#f7f8f8")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "#ffffff")}
             onMouseDown={(e) => (e.currentTarget.style.background = "#eeeeee")}
             onMouseUp={(e) => (e.currentTarget.style.background = "#f7f8f8")}
           >
             <GoogleLogo />
-            <span>Continue with Google</span>
+            <span>{oauthLoading ? "Redirecting..." : "Continue with Google"}</span>
           </button>
 
-          <button onClick={() => router.push(`/register?next=${encodeURIComponent(getNextPath())}`)} style={btnGhost}>
+          <button type="button" onClick={() => router.push(`/register?next=${encodeURIComponent(getNextPath())}`)} style={btnGhost}>
             New user? Create account
           </button>
 
-          {status ? <div style={statusBox(status.startsWith("✅"))}>{status}</div> : null}
+          {status ? <div role="status" aria-live="polite" style={statusBox(status.startsWith("✅"))}>{status}</div> : null}
         </div>
       </div>
     </div>
@@ -206,6 +216,18 @@ const dividerLabelStyle: React.CSSProperties = {
   color: "rgba(229,231,235,0.75)",
   background: "rgba(17,24,39,0.9)",
   borderRadius: 999,
+};
+
+const srOnly: React.CSSProperties = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  padding: 0,
+  margin: -1,
+  overflow: "hidden",
+  clip: "rect(0, 0, 0, 0)",
+  whiteSpace: "nowrap",
+  border: 0,
 };
 
 function statusBox(ok: boolean): React.CSSProperties {

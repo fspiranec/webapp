@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useIsMobile } from "@/lib/useIsMobile";
 
@@ -23,6 +24,7 @@ export default function EventsPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [pendingInvites, setPendingInvites] = useState(0);
+  const [myOpenTasks, setMyOpenTasks] = useState(0);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -43,6 +45,13 @@ export default function EventsPage() {
         .eq("accepted", false)
         .eq("email", (user.email ?? "").toLowerCase());
       setPendingInvites(invitesCount.count ?? 0);
+
+      const tasksCount = await supabase
+        .from("event_tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("assignee_id", user.id)
+        .neq("status", "done");
+      setMyOpenTasks(tasksCount.count ?? 0);
 
       const { data, error } = await supabase
         .from("event_members")
@@ -65,6 +74,7 @@ export default function EventsPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "event_invites" }, async () => {
         const { data: sess2 } = await supabase.auth.getSession();
         const em = sess2.session?.user.email?.toLowerCase();
+        const uid = sess2.session?.user.id;
         if (!em) return;
         const countRes = await supabase
           .from("event_invites")
@@ -72,6 +82,25 @@ export default function EventsPage() {
           .eq("accepted", false)
           .eq("email", em);
         setPendingInvites(countRes.count ?? 0);
+        if (uid) {
+          const taskRes = await supabase
+            .from("event_tasks")
+            .select("id", { count: "exact", head: true })
+            .eq("assignee_id", uid)
+            .neq("status", "done");
+          setMyOpenTasks(taskRes.count ?? 0);
+        }
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "event_tasks" }, async () => {
+        const { data: sess3 } = await supabase.auth.getSession();
+        const uid = sess3.session?.user.id;
+        if (!uid) return;
+        const taskRes = await supabase
+          .from("event_tasks")
+          .select("id", { count: "exact", head: true })
+          .eq("assignee_id", uid)
+          .neq("status", "done");
+        setMyOpenTasks(taskRes.count ?? 0);
       })
       .subscribe();
 
@@ -92,7 +121,12 @@ export default function EventsPage() {
       <div style={{ ...page, padding: isMobile ? 16 : 24 }}>
         <Shell isMobile={isMobile}>
           <Card>
-            <div style={{ color: "rgba(229,231,235,0.8)" }}>Loading…</div>
+            <div style={{ display: "grid", gap: 10 }}>
+              <div style={skeletonTitle} />
+              <div style={skeletonRow} />
+              <div style={skeletonRow} />
+              <div style={skeletonRow} />
+            </div>
           </Card>
         </Shell>
       </div>
@@ -130,16 +164,32 @@ export default function EventsPage() {
             </div>
           </div>
 
-          {err && <div style={statusBox(false)}>❌ {err}</div>}
+          {err && (
+            <div role="alert" aria-live="assertive" style={statusBox(false)}>
+              ❌ {err}
+            </div>
+          )}
 
           <div style={{ marginTop: 16, display: "grid", gap: 12 }}>
+            <div style={{ ...eventRow, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 900, fontSize: 16 }}>Notifications</div>
+                <div style={{ color: "rgba(229,231,235,0.75)", fontSize: 13, marginTop: 4 }}>
+                  Pending invites: <b>{pendingInvites}</b> • Open tasks assigned to you: <b>{myOpenTasks}</b>
+                </div>
+              </div>
+              <button style={btnGhost} onClick={() => router.push("/invites")}>
+                Open invites
+              </button>
+            </div>
+
             {events.length === 0 ? (
               <div style={{ color: "rgba(229,231,235,0.75)" }}>
                 No events yet. Create one!
               </div>
             ) : (
               events.map((e) => (
-                <a key={e.id} href={`/events/${e.id}`} style={eventRow}>
+                <Link key={e.id} href={`/events/${e.id}`} style={eventRow}>
                   <div style={{ fontWeight: 900, fontSize: 18 }}>{e.title}</div>
                   <div style={{ color: "rgba(229,231,235,0.75)", fontSize: 13, marginTop: 4 }}>
                     {e.type}
@@ -147,7 +197,7 @@ export default function EventsPage() {
                     {e.starts_at ? ` • ${new Date(e.starts_at).toLocaleString()}` : ""}
                     {e.location ? ` • ${e.location}` : ""}
                   </div>
-                </a>
+                </Link>
               ))
             )}
           </div>
@@ -229,6 +279,19 @@ const eventRow: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
   textDecoration: "none",
   color: "#e5e7eb",
+};
+
+const skeletonTitle: React.CSSProperties = {
+  height: 24,
+  borderRadius: 10,
+  background: "rgba(255,255,255,0.12)",
+  width: "45%",
+};
+
+const skeletonRow: React.CSSProperties = {
+  height: 58,
+  borderRadius: 14,
+  background: "rgba(255,255,255,0.08)",
 };
 
 function statusBox(ok: boolean): React.CSSProperties {

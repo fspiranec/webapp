@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useIsMobile } from "@/lib/useIsMobile";
+import { Button, Card, Stack, buttonStyle } from "@/components/ui/primitives";
+import { gradientPageBackground, spacing } from "@/lib/uiStyles";
 
 type EventRow = {
   id: string;
@@ -124,12 +126,12 @@ export default function EventsPage() {
       <div style={{ ...page, padding: isMobile ? 16 : 24 }}>
         <Shell isMobile={isMobile}>
           <Card>
-            <div style={{ display: "grid", gap: 10 }}>
+            <Stack gap={10}>
               <div style={skeletonTitle} />
               <div style={skeletonRow} />
               <div style={skeletonRow} />
               <div style={skeletonRow} />
-            </div>
+            </Stack>
           </Card>
         </Shell>
       </div>
@@ -148,22 +150,22 @@ export default function EventsPage() {
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <button style={btnPrimary} onClick={() => router.push("/events/new")}>
+            <div style={actionsRowStyle(isMobile)}>
+              <Button variant="primary" style={headerActionButtonStyle(isMobile)} onClick={() => router.push("/events/new")}>
                 + New event
-              </button>
+              </Button>
 
-              <button style={btnGhost} onClick={() => router.push("/invites")}>
+              <Button style={headerActionButtonStyle(isMobile)} onClick={() => router.push("/invites")}>
                 Invites{pendingInvites > 0 ? ` (${pendingInvites}) 🔔` : ""}
-              </button>
+              </Button>
 
-              <button style={btnGhost} onClick={() => router.push("/profile")}>
+              <Button style={headerActionButtonStyle(isMobile)} onClick={() => router.push("/profile")}>
                 Profile
-              </button>
+              </Button>
 
-              <button style={btnGhost} onClick={signOut}>
+              <Button style={headerActionButtonStyle(isMobile)} onClick={signOut}>
                 Sign out
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -173,34 +175,43 @@ export default function EventsPage() {
             </div>
           )}
 
-          <div style={{ marginTop: 16, display: "grid", gap: 12 }}>
-            <div style={{ ...eventRow, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <Stack gap={12} style={{ marginTop: spacing.md }}>
+            <div
+              style={{
+                ...eventRow,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: isMobile ? "stretch" : "center",
+                gap: 12,
+                flexDirection: isMobile ? "column" : "row",
+              }}
+            >
               <div>
                 <div style={{ fontWeight: 900, fontSize: 16 }}>Notifications</div>
                 <div style={{ color: "rgba(229,231,235,0.75)", fontSize: 13, marginTop: 4 }}>
                   Pending invites: <b>{pendingInvites}</b> • Open tasks assigned to you: <b>{myOpenTasks}</b>
                 </div>
               </div>
-              <button style={btnGhost} onClick={() => router.push("/invites")}>
+              <Button style={headerActionButtonStyle(isMobile)} onClick={() => router.push("/invites")}>
                 Open invites
-              </button>
+              </Button>
             </div>
 
             {events.length === 0 ? (
-              <div style={{ ...eventRow, borderStyle: "dashed", display: "grid", gap: 10 }}>
+              <Stack gap={10} style={{ ...eventRow, borderStyle: "dashed" }}>
                 <div style={{ color: "rgba(229,231,235,0.9)", fontWeight: 900, fontSize: 17 }}>No events yet</div>
                 <div style={{ color: "rgba(229,231,235,0.75)" }}>
                   Create your first event to start invites, polls, and task planning.
                 </div>
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <button style={btnPrimary} onClick={() => router.push("/events/new")}>
+                <div style={emptyStateActionsStyle(isMobile)}>
+                  <Button variant="primary" fullWidth={isMobile} onClick={() => router.push("/events/new")}>
                     + Create first event
-                  </button>
-                  <button style={btnGhost} onClick={() => router.push("/invites")}>
+                  </Button>
+                  <Button fullWidth={isMobile} onClick={() => router.push("/invites")}>
                     Check invites
-                  </button>
+                  </Button>
                 </div>
-              </div>
+              </Stack>
             ) : (
               events.map((e) => (
                 <Link key={e.id} href={`/events/${e.id}`} style={eventRow}>
@@ -214,7 +225,7 @@ export default function EventsPage() {
                 </Link>
               ))
             )}
-          </div>
+          </Stack>
         </Card>
       </Shell>
     </div>
@@ -238,51 +249,12 @@ function Shell({ children, isMobile }: { children: React.ReactNode; isMobile: bo
   );
 }
 
-function Card({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        borderRadius: 22,
-        padding: 20,
-        background: "rgba(255,255,255,0.06)",
-        border: "1px solid rgba(255,255,255,0.10)",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.45)",
-        color: "#e5e7eb",
-        backdropFilter: "blur(10px)",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
 /* ================= STYLES ================= */
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
-  background:
-    "radial-gradient(900px 500px at 50% 0%, rgba(124,58,237,0.45), transparent 60%), linear-gradient(180deg, #0b1020 0%, #0f172a 60%, #111827 100%)",
-  padding: 24,
-};
-
-const btnPrimary: React.CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.16)",
-  background: "linear-gradient(90deg,#60a5fa,#a78bfa)",
-  color: "#0b1020",
-  fontWeight: 900,
-  cursor: "pointer",
-};
-
-const btnGhost: React.CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.16)",
-  background: "rgba(255,255,255,0.06)",
-  color: "#e5e7eb",
-  fontWeight: 900,
-  cursor: "pointer",
+  background: gradientPageBackground,
+  padding: spacing.lg,
 };
 
 const eventRow: React.CSSProperties = {
@@ -316,5 +288,32 @@ function statusBox(ok: boolean): React.CSSProperties {
     background: "rgba(255,255,255,0.06)",
     border: "1px solid rgba(255,255,255,0.12)",
     color: ok ? "#86efac" : "#fca5a5",
+  };
+}
+
+function actionsRowStyle(isMobile: boolean): React.CSSProperties {
+  return {
+    display: "grid",
+    gap: spacing.xs,
+    alignItems: "stretch",
+    gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, max-content))",
+    width: isMobile ? "100%" : "auto",
+  };
+}
+
+function headerActionButtonStyle(isMobile: boolean): React.CSSProperties {
+  return {
+    minHeight: buttonStyle("primary").minHeight,
+    width: isMobile ? "100%" : "auto",
+    textAlign: "center",
+    whiteSpace: "nowrap",
+  };
+}
+
+function emptyStateActionsStyle(isMobile: boolean): React.CSSProperties {
+  return {
+    display: "grid",
+    gap: spacing.xs,
+    gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, max-content))",
   };
 }

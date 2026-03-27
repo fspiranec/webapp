@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { Card, Stack, buttonStyle } from "@/components/ui/primitives";
+import { gradientPageBackground, spacing } from "@/lib/uiStyles";
 
 // Public landing page to explain value before auth and improve first-run UX.
 export default function Home() {
@@ -46,42 +48,41 @@ export default function Home() {
   if (checkingSession) {
     return (
       <main style={pageStyle}>
-        <section style={heroCardStyle}>
+        <Card style={heroCardStyle}>
           <p style={subtitleStyle}>Checking your session…</p>
-        </section>
+        </Card>
       </main>
     );
   }
 
   return (
     <main style={pageStyle}>
-      <section style={heroCardStyle}>
+      <Card style={heroCardStyle}>
         <p style={eyebrowStyle}>Plan better events together</p>
         <h1 style={titleStyle}>One workspace for invites, polls, tasks, and event chat</h1>
         <p style={subtitleStyle}>
           Coordinate birthday surprises, grill parties, and group events without jumping between multiple apps.
         </p>
 
-        <div style={actionsStyle}>
+        <Stack gap={spacing.xs} style={actionsStyle}>
           <Link href="/register" style={btnPrimaryStyle}>
             Create account
           </Link>
           <Link href="/login" style={btnGhostStyle}>
             Sign in
           </Link>
-        </div>
-      </section>
+        </Stack>
+      </Card>
     </main>
   );
 }
 
 const pageStyle: React.CSSProperties = {
   minHeight: "100vh",
-  padding: 24,
+  padding: spacing.lg,
   display: "grid",
   placeItems: "center",
-  background:
-    "radial-gradient(900px 500px at 50% 0%, rgba(124,58,237,0.45), transparent 60%), linear-gradient(180deg, #0b1020 0%, #0f172a 60%, #111827 100%)",
+  background: gradientPageBackground,
   color: "#e5e7eb",
   fontFamily: "system-ui",
 };
@@ -89,11 +90,7 @@ const pageStyle: React.CSSProperties = {
 const heroCardStyle: React.CSSProperties = {
   width: "100%",
   maxWidth: 760,
-  borderRadius: 22,
-  padding: 24,
-  background: "rgba(255,255,255,0.06)",
-  border: "1px solid rgba(255,255,255,0.10)",
-  boxShadow: "0 20px 60px rgba(0,0,0,0.45)",
+  padding: spacing.lg,
 };
 
 const eyebrowStyle: React.CSSProperties = {
@@ -112,35 +109,29 @@ const titleStyle: React.CSSProperties = {
 };
 
 const subtitleStyle: React.CSSProperties = {
-  margin: "14px 0 0",
+  margin: `${spacing.sm}px 0 0`,
   color: "rgba(229,231,235,0.8)",
   maxWidth: 620,
   fontSize: 16,
 };
 
 const actionsStyle: React.CSSProperties = {
-  marginTop: 22,
-  display: "flex",
-  gap: 10,
-  flexWrap: "wrap",
+  marginTop: spacing.md,
+  gridTemplateColumns: "repeat(auto-fit, minmax(140px, max-content))",
 };
 
 const btnPrimaryStyle: React.CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.16)",
-  background: "linear-gradient(90deg,#60a5fa,#a78bfa)",
-  color: "#0b1020",
-  fontWeight: 900,
+  ...buttonStyle("primary"),
   textDecoration: "none",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 const btnGhostStyle: React.CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.16)",
-  background: "rgba(255,255,255,0.06)",
-  color: "#e5e7eb",
-  fontWeight: 900,
+  ...buttonStyle("ghost"),
   textDecoration: "none",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
 };

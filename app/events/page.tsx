@@ -30,6 +30,9 @@ export default function EventsPage() {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
 
+    let currentEmail = "";
+    let currentUserId = "";
+
     (async () => {
       const { data: sess } = await supabase.auth.getSession();
       if (!sess.session) {
@@ -37,26 +40,31 @@ export default function EventsPage() {
         return;
       }
       const user = sess.session.user;
+      currentEmail = (user.email ?? "").toLowerCase();
+      currentUserId = user.id;
       setEmail(user.email ?? "");
 
-      const invitesCount = await supabase
-        .from("event_invites")
-        .select("id", { count: "exact", head: true })
-        .eq("accepted", false)
-        .eq("email", (user.email ?? "").toLowerCase());
-      setPendingInvites(invitesCount.count ?? 0);
+      const [invitesCount, tasksCount, membershipRes] = await Promise.all([
+        supabase
+          .from("event_invites")
+          .select("id", { count: "exact", head: true })
+          .eq("accepted", false)
+          .eq("email", currentEmail),
+        supabase
+          .from("event_tasks")
+          .select("id", { count: "exact", head: true })
+          .eq("assignee_id", currentUserId)
+          .neq("status", "done"),
+        supabase
+          .from("event_members")
+          .select("event_id, events(id,title,type,starts_at,location,surprise_mode)")
+          .eq("user_id", currentUserId),
+      ]);
 
-      const tasksCount = await supabase
-        .from("event_tasks")
-        .select("id", { count: "exact", head: true })
-        .eq("assignee_id", user.id)
-        .neq("status", "done");
+      setPendingInvites(invitesCount.count ?? 0);
       setMyOpenTasks(tasksCount.count ?? 0);
 
-      const { data, error } = await supabase
-        .from("event_members")
-        .select("event_id, events(id,title,type,starts_at,location,surprise_mode)")
-        .eq("user_id", user.id);
+      const { data, error } = membershipRes;
 
       if (error) {
         setErr(error.message);
@@ -72,33 +80,28 @@ export default function EventsPage() {
     const invitesChannel = supabase
       .channel("events-page-invites")
       .on("postgres_changes", { event: "*", schema: "public", table: "event_invites" }, async () => {
-        const { data: sess2 } = await supabase.auth.getSession();
-        const em = sess2.session?.user.email?.toLowerCase();
-        const uid = sess2.session?.user.id;
-        if (!em) return;
+        if (!currentEmail) return;
         const countRes = await supabase
           .from("event_invites")
           .select("id", { count: "exact", head: true })
           .eq("accepted", false)
-          .eq("email", em);
+          .eq("email", currentEmail);
         setPendingInvites(countRes.count ?? 0);
-        if (uid) {
+        if (currentUserId) {
           const taskRes = await supabase
             .from("event_tasks")
             .select("id", { count: "exact", head: true })
-            .eq("assignee_id", uid)
+            .eq("assignee_id", currentUserId)
             .neq("status", "done");
           setMyOpenTasks(taskRes.count ?? 0);
         }
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "event_tasks" }, async () => {
-        const { data: sess3 } = await supabase.auth.getSession();
-        const uid = sess3.session?.user.id;
-        if (!uid) return;
+        if (!currentUserId) return;
         const taskRes = await supabase
           .from("event_tasks")
           .select("id", { count: "exact", head: true })
-          .eq("assignee_id", uid)
+          .eq("assignee_id", currentUserId)
           .neq("status", "done");
         setMyOpenTasks(taskRes.count ?? 0);
       })
@@ -184,8 +187,19 @@ export default function EventsPage() {
             </div>
 
             {events.length === 0 ? (
-              <div style={{ color: "rgba(229,231,235,0.75)" }}>
-                No events yet. Create one!
+              <div style={{ ...eventRow, borderStyle: "dashed", display: "grid", gap: 10 }}>
+                <div style={{ color: "rgba(229,231,235,0.9)", fontWeight: 900, fontSize: 17 }}>No events yet</div>
+                <div style={{ color: "rgba(229,231,235,0.75)" }}>
+                  Create your first event to start invites, polls, and task planning.
+                </div>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <button style={btnPrimary} onClick={() => router.push("/events/new")}>
+                    + Create first event
+                  </button>
+                  <button style={btnGhost} onClick={() => router.push("/invites")}>
+                    Check invites
+                  </button>
+                </div>
               </div>
             ) : (
               events.map((e) => (

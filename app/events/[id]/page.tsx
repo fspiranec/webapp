@@ -6,113 +6,26 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useIsMobile } from "@/lib/useIsMobile";
+import type {
+  ClaimRow,
+  EventRow,
+  FriendRow,
+  InviteRow,
+  ItemRow,
+  MemberRow,
+  MsgRow,
+  OrganizerTab,
+  PollOptionRow,
+  PollRow,
+  PollVoteRow,
+  TaskRow,
+} from "./event-types";
 const OrganizerToolsPanel = dynamic(() => import("./OrganizerToolsPanel"), {
   ssr: false,
   loading: () => <div style={{ color: "rgba(229,231,235,0.75)", marginTop: 12 }}>Loading organizer tools…</div>,
 });
 
 const EVENT_IMAGE_BUCKET = "event-images";
-
-/* ================= TYPES ================= */
-type PollRow = {
-  id: string;
-  event_id: string;
-  question: string;
-  mode: "single" | "multi";
-  created_by: string;
-  created_at: string;
-  closed_at: string | null;
-};
-
-type PollOptionRow = {
-  id: string;
-  poll_id: string;
-  label: string;
-};
-
-type PollVoteRow = {
-  id: string;
-  event_id: string;
-  poll_id: string;
-  option_id: string;
-  user_id: string;
-  created_at: string;
-};
-
-type EventRow = {
-  id: string;
-  creator_id: string;
-  title: string;
-  type: string;
-  starts_at: string | null;
-  ends_at: string | null;
-  location: string | null;
-  description: string | null;
-  surprise_mode: boolean;
-  cover_image_path: string | null;
-};
-
-type ItemRow = {
-  id: string;
-  event_id: string;
-  title: string;
-  notes: string | null;
-  claim_mode: "single" | "multi";
-  created_by: string;
-  created_at?: string;
-};
-
-type ClaimRow = {
-  id: string;
-  event_item_id: string;
-  user_id: string;
-  full_name: string | null;
-  email: string | null;
-};
-
-type InviteRow = {
-  id: string;
-  event_id?: string;
-  email: string;
-  accepted: boolean;
-  created_at: string;
-};
-
-type FriendRow = {
-  id: string;
-  friend_email: string;
-  friend_name: string | null;
-};
-
-type MemberRow = {
-  user_id: string;
-  full_name: string | null;
-  email: string | null;
-  rsvp: "accepted" | "maybe" | "declined" | null;
-};
-
-type MsgRow = {
-  id: string;
-  event_id: string;
-  sender_id: string;
-  visibility: "general" | "secret";
-  body: string;
-  created_at: string;
-  full_name: string | null;
-  email: string | null;
-};
-
-type TaskRow = {
-  id: string;
-  event_id: string;
-  title: string;
-  description: string | null;
-  assignee_id: string | null;
-  visibility: "public" | "secret";
-  status: "todo" | "in_progress" | "done";
-  created_by: string;
-  created_at: string;
-};
 
 /* ================= PAGE ================= */
 
@@ -173,7 +86,7 @@ export default function EventPage() {
 
   // Chat
   const [chatTab, setChatTab] = useState<"general" | "secret">("general");
-  const [organizerTab, setOrganizerTab] = useState<"polls" | "event" | "invite" | "tasks">("polls");
+  const [organizerTab, setOrganizerTab] = useState<OrganizerTab>("polls");
   const [organizerToolsExpanded, setOrganizerToolsExpanded] = useState(true);
   const [messages, setMessages] = useState<MsgRow[]>([]);
   const [msgText, setMsgText] = useState("");

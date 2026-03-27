@@ -2,32 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
-
-type PollRow = {
-  id: string;
-  event_id: string;
-  question: string;
-  mode?: string | null;
-  created_by: string;
-  created_at?: string | null;
-  closed_at?: string | null;
-};
-
-type PollOptionRow = {
-  id: string;
-  poll_id: string;
-  label: string;
-  created_at?: string | null;
-};
-
-type PollVoteRow = {
-  id: string;
-  event_id: string;
-  poll_id: string;
-  option_id: string;
-  user_id: string;
-  created_at?: string | null;
-};
+import type { PollOptionRow, PollRow, PollVoteRow } from "./event-types";
 
 type ProfileRow = {
   id: string;

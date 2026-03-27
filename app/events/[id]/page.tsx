@@ -3,112 +3,30 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useIsMobile } from "@/lib/useIsMobile";
 import PollsCard from "./PollsCard";
+import type {
+  ClaimRow,
+  EventRow,
+  FriendRow,
+  InviteRow,
+  ItemRow,
+  MemberRow,
+  MsgRow,
+  OrganizerTab,
+  PollOptionRow,
+  PollRow,
+  PollVoteRow,
+  TaskRow,
+} from "./event-types";
+const OrganizerToolsPanel = dynamic(() => import("./OrganizerToolsPanel"), {
+  ssr: false,
+  loading: () => <div style={{ color: "rgba(229,231,235,0.75)", marginTop: 12 }}>Loading organizer tools…</div>,
+});
 
 const EVENT_IMAGE_BUCKET = "event-images";
-
-/* ================= TYPES ================= */
-type PollRow = {
-  id: string;
-  event_id: string;
-  question: string;
-  mode: "single" | "multi";
-  created_by: string;
-  created_at: string;
-  closed_at: string | null;
-};
-
-type PollOptionRow = {
-  id: string;
-  poll_id: string;
-  label: string;
-};
-
-type PollVoteRow = {
-  id: string;
-  event_id: string;
-  poll_id: string;
-  option_id: string;
-  user_id: string;
-  created_at: string;
-};
-
-type EventRow = {
-  id: string;
-  creator_id: string;
-  title: string;
-  type: string;
-  starts_at: string | null;
-  ends_at: string | null;
-  location: string | null;
-  description: string | null;
-  surprise_mode: boolean;
-  cover_image_path: string | null;
-};
-
-type ItemRow = {
-  id: string;
-  event_id: string;
-  title: string;
-  notes: string | null;
-  claim_mode: "single" | "multi";
-  created_by: string;
-  created_at?: string;
-};
-
-type ClaimRow = {
-  id: string;
-  event_item_id: string;
-  user_id: string;
-  full_name: string | null;
-  email: string | null;
-};
-
-type InviteRow = {
-  id: string;
-  event_id?: string;
-  email: string;
-  accepted: boolean;
-  created_at: string;
-};
-
-type FriendRow = {
-  id: string;
-  friend_email: string;
-  friend_name: string | null;
-};
-
-type MemberRow = {
-  user_id: string;
-  full_name: string | null;
-  email: string | null;
-  rsvp: "accepted" | "maybe" | "declined" | null;
-};
-
-type MsgRow = {
-  id: string;
-  event_id: string;
-  sender_id: string;
-  visibility: "general" | "secret";
-  body: string;
-  created_at: string;
-  full_name: string | null;
-  email: string | null;
-};
-
-type TaskRow = {
-  id: string;
-  event_id: string;
-  title: string;
-  description: string | null;
-  assignee_id: string | null;
-  visibility: "public" | "secret";
-  status: "todo" | "in_progress" | "done";
-  created_by: string;
-  created_at: string;
-};
 
 /* ================= PAGE ================= */
 
@@ -169,7 +87,7 @@ export default function EventPage() {
 
   // Chat
   const [chatTab, setChatTab] = useState<"general" | "secret">("general");
-  const [organizerTab, setOrganizerTab] = useState<"polls" | "event" | "invite" | "tasks">("polls");
+  const [organizerTab, setOrganizerTab] = useState<OrganizerTab>("polls");
   const [organizerToolsExpanded, setOrganizerToolsExpanded] = useState(true);
   const [messages, setMessages] = useState<MsgRow[]>([]);
   const [msgText, setMsgText] = useState("");
@@ -1284,281 +1202,83 @@ export default function EventPage() {
               </button>
             </div>
 
-            {organizerToolsExpanded && (
-              <div style={{ marginTop: 12 }}>
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <button onClick={() => setOrganizerTab("polls")} style={organizerTab === "polls" ? btnPrimary : btnGhost}>
-                    Polls
-                  </button>
-                  <button onClick={() => setOrganizerTab("event")} style={organizerTab === "event" ? btnPrimary : btnGhost}>
-                    Event details
-                  </button>
-                  <button onClick={() => setOrganizerTab("invite")} style={organizerTab === "invite" ? btnPrimary : btnGhost}>
-                    Invite
-                  </button>
-                  <button onClick={() => setOrganizerTab("tasks")} style={organizerTab === "tasks" ? btnPrimary : btnGhost}>
-                    Tasks
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {organizerToolsExpanded && organizerTab === "polls" && me && (
-              <div style={{ marginTop: 12 }}>
-                <PollsCard
-                  eventId={eventId}
-                  meId={me.id}
-                  isCreator={!!isCreator}
-                  eventMemberCount={members.length}
-                  polls={polls}
-                  options={pollOptions}
-                  votes={pollVotes}
-                  onReload={loadAll}
-                  title="Manage polls"
-                />
-              </div>
-            )}
-
-            {organizerToolsExpanded && organizerTab === "event" && (
-              <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
-                <button onClick={() => router.push(`/events/${event.id}/edit`)} style={btnGhost}>
-                  Edit event
-                </button>
-                <div style={{ ...cardInsetStyle, border: "1px solid rgba(252,165,165,0.3)" }}>
-                  <h3 style={{ marginTop: 0, color: "#fecaca" }}>Delete event</h3>
-                  <p style={{ color: "rgba(229,231,235,0.75)" }}>Delete event (requires your password).</p>
-                  <input
-                    type="password"
-                    value={deletePw}
-                    onChange={(e) => setDeletePw(e.target.value)}
-                    placeholder="Your password"
-                    style={inputStyle}
-                  />
-                  <button onClick={deleteEventWithPassword} style={btnDanger}>
-                    Delete event permanently
-                  </button>
-                  {deleteStatus && <div style={statusBoxStyle(deleteStatus.startsWith("✅"))}>{deleteStatus}</div>}
-                </div>
-              </div>
-            )}
-
-            {organizerToolsExpanded && organizerTab === "invite" && (
-              <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
-                <div>
-                  <div style={{ fontWeight: 900, marginBottom: 8 }}>Invitation link</div>
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <input value={inviteLink} readOnly style={inputStyle} />
-                    <button
-                      onClick={async () => {
-                        await navigator.clipboard.writeText(inviteLink);
-                        setInviteStatus("✅ Invitation link copied");
-                      }}
-                      style={btnGhost}
-                    >
-                      Copy link
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <div style={{ fontWeight: 900, marginBottom: 8 }}>Invite multiple friends</div>
-                  {friends.length === 0 ? (
-                    <div style={{ color: "rgba(229,231,235,0.75)" }}>
-                      No friends yet. Add them in{" "}
-                      <Link href="/profile" style={navLink}>
-                        /profile
-                      </Link>
-                      .
-                    </div>
-                  ) : (
-                    <select
-                      multiple
-                      value={selectedFriends.map((f) => f.id)}
-                      onChange={(e) => {
-                        const ids = Array.from(e.target.selectedOptions)
-                          .map((opt) => opt.value)
-                          .filter(Boolean);
-                        setSelectedFriendIdsFromSelect(ids);
-                      }}
-                      style={{ ...inputStyle, minHeight: 140 }}
-                    >
-                      {friends.map((f) => (
-                        <option key={f.id} value={f.id}>
-                          {f.friend_name ? `${f.friend_name} — ${f.friend_email}` : f.friend_email}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
-                    <button onClick={inviteSelectedFriends} style={btnPrimary}>
-                      Invite selected ({selectedFriends.length})
-                    </button>
-                    <button onClick={clearSelected} style={btnGhost}>
-                      Clear selection
-                    </button>
-                  </div>
-                  {bulkStatus && <div style={statusBoxStyle(bulkStatus.startsWith("✅"))}>{bulkStatus}</div>}
-                </div>
-
-                <div style={{ ...cardInsetStyle }}>
-                  <div style={{ fontWeight: 900, marginBottom: 8 }}>Email all invited users</div>
-                  <div style={{ display: "grid", gap: 10 }}>
-                    <input
-                      value={emailAllSubject}
-                      onChange={(e) => setEmailAllSubject(e.target.value)}
-                      placeholder={`Subject (default: Reminder: ${event.title})`}
-                      style={inputStyle}
-                    />
-                    <textarea
-                      value={emailAllMessage}
-                      onChange={(e) => setEmailAllMessage(e.target.value)}
-                      placeholder="Write your email message here..."
-                      style={{ ...inputStyle, minHeight: 120, resize: "vertical" }}
-                    />
-                  </div>
-                  <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
-                    <button onClick={fillChangedDateTemplate} style={btnGhost}>
-                      Use date/time change template
-                    </button>
-                    <button onClick={emailAllInvitedUsers} style={btnPrimary}>
-                      Send custom email ({invites.length})
-                    </button>
-                  </div>
-                  {emailAllStatus && <div style={statusBoxStyle(emailAllStatus.startsWith("✅"))}>{emailAllStatus}</div>}
-                </div>
-
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <input
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="friend@email.com"
-                    style={inputStyle}
-                  />
-                  <button onClick={sendSingleInvite} style={btnPrimary}>
-                    Send invite
-                  </button>
-                </div>
-                {inviteStatus && <div style={statusBoxStyle(inviteStatus.startsWith("✅"))}>{inviteStatus}</div>}
-
-                <div style={{ display: "grid", gap: 10 }}>
-                  {invites.map((inv) => (
-                    <div key={inv.id} style={rowStyle}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 900 }}>{inv.email}</div>
-                        <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
-                          {inv.accepted ? "✅ Accepted" : "Pending"} • {new Date(inv.created_at).toLocaleString()}
-                        </div>
-                      </div>
-                      <button style={btnDangerSmall} onClick={() => uninvite(inv.id)}>
-                        Uninvite
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {organizerToolsExpanded && organizerTab === "tasks" && (
-              <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-                <input
-                  placeholder="Task title"
-                  value={taskTitle}
-                  onChange={(e) => setTaskTitle(e.target.value)}
-                  style={inputStyle}
-                />
-                <textarea
-                  placeholder="Task description"
-                  value={taskDescription}
-                  onChange={(e) => setTaskDescription(e.target.value)}
-                  style={{ ...inputStyle, minHeight: 90, resize: "vertical" as const }}
-                />
-                <select value={taskAssigneeId} onChange={(e) => setTaskAssigneeId(e.target.value)} style={inputStyle}>
-                  <option value="">Assign to…</option>
-                  {members.map((m) => (
-                    <option key={m.user_id} value={m.user_id}>
-                      {displayNameByUser(m.user_id, m.full_name, null)}
-                    </option>
-                  ))}
-                </select>
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <select
-                    value={taskVisibility}
-                    onChange={(e) => setTaskVisibility(e.target.value as "public" | "secret")}
-                    style={inputStyle}
-                  >
-                    <option value="public">Public</option>
-                    <option value="secret">Secret</option>
-                  </select>
-                  <select
-                    value={taskStatus}
-                    onChange={(e) => setTaskStatus(e.target.value as "todo" | "in_progress" | "done")}
-                    style={inputStyle}
-                  >
-                    <option value="todo">To do</option>
-                    <option value="in_progress">In progress</option>
-                    <option value="done">Done</option>
-                  </select>
-                </div>
-                <button onClick={createTask} disabled={!taskTitle.trim()} style={primaryBtnStyle(!taskTitle.trim())}>
-                  + Add task
-                </button>
-
-                <div style={{ marginTop: 8, display: "grid", gap: 10 }}>
-                  {tasks.filter(canViewTask).map((task) => {
-                    const editing = editTaskId === task.id;
-                    return (
-                      <div key={task.id} style={rowStyle}>
-                        <div style={{ flex: 1 }}>
-                          {editing ? (
-                            <div style={{ display: "grid", gap: 8 }}>
-                              <input value={editTaskTitle} onChange={(e) => setEditTaskTitle(e.target.value)} style={inputStyle} />
-                              <textarea
-                                value={editTaskDescription}
-                                onChange={(e) => setEditTaskDescription(e.target.value)}
-                                style={{ ...inputStyle, minHeight: 90, resize: "vertical" as const }}
-                              />
-                              <select value={editTaskAssigneeId} onChange={(e) => setEditTaskAssigneeId(e.target.value)} style={inputStyle}>
-                                <option value="">Assign to…</option>
-                                {members.map((m) => (
-                                  <option key={m.user_id} value={m.user_id}>
-                                    {displayNameByUser(m.user_id, m.full_name, null)}
-                                  </option>
-                                ))}
-                              </select>
-                              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                                <select value={editTaskVisibility} onChange={(e) => setEditTaskVisibility(e.target.value as "public" | "secret")} style={inputStyle}>
-                                  <option value="public">Public</option>
-                                  <option value="secret">Secret</option>
-                                </select>
-                                <select value={editTaskStatus} onChange={(e) => setEditTaskStatus(e.target.value as "todo" | "in_progress" | "done")} style={inputStyle}>
-                                  <option value="todo">To do</option>
-                                  <option value="in_progress">In progress</option>
-                                  <option value="done">Done</option>
-                                </select>
-                              </div>
-                              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                                <button onClick={saveTaskEdit} style={btnPrimary}>Save</button>
-                                <button onClick={cancelTaskEdit} style={btnGhost}>Cancel</button>
-                              </div>
-                            </div>
-                          ) : (
-                            <>
-                              <b>{task.title}</b>
-                              <div style={{ marginTop: 6, color: "rgba(229,231,235,0.75)" }}>{task.description || "No description"}</div>
-                            </>
-                          )}
-                        </div>
-                        {!editing && (
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <button onClick={() => startTaskEdit(task)} style={btnGhostSmall}>Edit</button>
-                            <button onClick={() => deleteTask(task.id)} style={btnDangerSmall}>Delete</button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+            {organizerToolsExpanded && me && (
+              <OrganizerToolsPanel
+                eventId={eventId}
+                event={event}
+                meId={me.id}
+                isCreator={!!isCreator}
+                members={members}
+                polls={polls}
+                pollOptions={pollOptions}
+                pollVotes={pollVotes}
+                invites={invites}
+                friends={friends}
+                tasks={tasks}
+                selectedFriends={selectedFriends}
+                organizerTab={organizerTab}
+                setOrganizerTab={setOrganizerTab}
+                deletePw={deletePw}
+                setDeletePw={setDeletePw}
+                deleteStatus={deleteStatus}
+                deleteEventWithPassword={deleteEventWithPassword}
+                inviteLink={inviteLink}
+                inviteEmail={inviteEmail}
+                setInviteEmail={setInviteEmail}
+                inviteStatus={inviteStatus}
+                sendSingleInvite={sendSingleInvite}
+                setSelectedFriendIdsFromSelect={setSelectedFriendIdsFromSelect}
+                inviteSelectedFriends={inviteSelectedFriends}
+                clearSelected={clearSelected}
+                bulkStatus={bulkStatus}
+                emailAllSubject={emailAllSubject}
+                setEmailAllSubject={setEmailAllSubject}
+                emailAllMessage={emailAllMessage}
+                setEmailAllMessage={setEmailAllMessage}
+                fillChangedDateTemplate={fillChangedDateTemplate}
+                emailAllInvitedUsers={emailAllInvitedUsers}
+                emailAllStatus={emailAllStatus}
+                uninvite={uninvite}
+                taskTitle={taskTitle}
+                setTaskTitle={setTaskTitle}
+                taskDescription={taskDescription}
+                setTaskDescription={setTaskDescription}
+                taskAssigneeId={taskAssigneeId}
+                setTaskAssigneeId={setTaskAssigneeId}
+                taskVisibility={taskVisibility}
+                setTaskVisibility={setTaskVisibility}
+                taskStatus={taskStatus}
+                setTaskStatus={setTaskStatus}
+                createTask={createTask}
+                canViewTask={canViewTask}
+                editTaskId={editTaskId}
+                editTaskTitle={editTaskTitle}
+                setEditTaskTitle={setEditTaskTitle}
+                editTaskDescription={editTaskDescription}
+                setEditTaskDescription={setEditTaskDescription}
+                editTaskAssigneeId={editTaskAssigneeId}
+                setEditTaskAssigneeId={setEditTaskAssigneeId}
+                editTaskVisibility={editTaskVisibility}
+                setEditTaskVisibility={setEditTaskVisibility}
+                editTaskStatus={editTaskStatus}
+                setEditTaskStatus={setEditTaskStatus}
+                saveTaskEdit={saveTaskEdit}
+                cancelTaskEdit={cancelTaskEdit}
+                startTaskEdit={startTaskEdit}
+                deleteTask={deleteTask}
+                displayNameByUser={displayNameByUser}
+                loadAll={loadAll}
+                btnPrimary={btnPrimary}
+                btnGhost={btnGhost}
+                btnDanger={btnDanger}
+                btnDangerSmall={btnDangerSmall}
+                rowStyle={rowStyle}
+                cardInsetStyle={cardInsetStyle}
+                inputStyle={inputStyle}
+                navLink={navLink}
+                statusBoxStyle={statusBoxStyle}
+                primaryBtnStyle={primaryBtnStyle}
+              />
             )}
           </Card>
         )}

@@ -7,6 +7,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useIsMobile } from "@/lib/useIsMobile";
 import { Button, Card, Stack, buttonStyle } from "@/components/ui/primitives";
 import { gradientPageBackground, spacing } from "@/lib/uiStyles";
+import { formatDateTime } from "@/lib/dateTime";
 
 type EventRow = {
   id: string;
@@ -265,7 +266,7 @@ export default function EventsPage() {
                   <div style={{ color: "rgba(229,231,235,0.75)", fontSize: 13, marginTop: 4 }}>
                     {e.type}
                     {e.surprise_mode ? " • 🎁 surprise" : ""}
-                    {e.starts_at ? ` • ${new Date(e.starts_at).toLocaleString()}` : ""}
+                    {e.starts_at ? ` • ${formatDateTime(e.starts_at)}` : ""}
                     {e.location ? ` • ${e.location}` : ""}
                   </div>
                 </Link>

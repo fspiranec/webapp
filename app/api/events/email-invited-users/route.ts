@@ -35,9 +35,17 @@ function escapeHtml(value: string) {
 function formatDateRange(startsAt?: string | null, endsAt?: string | null) {
   if (!startsAt) return "Time: not specified";
 
-  const start = new Date(startsAt).toLocaleString();
+  const dateTimeFormat = new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const start = dateTimeFormat.format(new Date(startsAt));
   if (!endsAt) return `Time: ${start}`;
-  return `Time: ${start} - ${new Date(endsAt).toLocaleString()}`;
+  return `Time: ${start} - ${dateTimeFormat.format(new Date(endsAt))}`;
 }
 
 function canSendFromKey(rateKey: string) {

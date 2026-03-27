@@ -6,6 +6,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useIsMobile } from "@/lib/useIsMobile";
+import { formatDateRange, formatDateTime } from "@/lib/dateTime";
 import PollsCard from "./PollsCard";
 import type {
   ClaimRow,
@@ -120,39 +121,6 @@ export default function EventPage() {
     if (!supabase || !event?.cover_image_path) return "";
     return supabase.storage.from(EVENT_IMAGE_BUCKET).getPublicUrl(event.cover_image_path).data.publicUrl;
   }, [event?.cover_image_path]);
-
-  function downloadCalendarInvite() {
-    if (!event) return;
-    const fmt = (iso: string) => iso.replace(/[-:]/g, "").split(".")[0] + "Z";
-    const starts = event.starts_at ? new Date(event.starts_at).toISOString() : new Date().toISOString();
-    const ends = event.ends_at
-      ? new Date(event.ends_at).toISOString()
-      : new Date(new Date(starts).getTime() + 60 * 60 * 1000).toISOString();
-    const safe = (v: string) => v.replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
-    const lines = [
-      "BEGIN:VCALENDAR",
-      "VERSION:2.0",
-      "PRODID:-//Event Planner//EN",
-      "BEGIN:VEVENT",
-      `UID:${event.id}@event-planner`,
-      `DTSTAMP:${fmt(new Date().toISOString())}`,
-      `DTSTART:${fmt(starts)}`,
-      `DTEND:${fmt(ends)}`,
-      `SUMMARY:${safe(event.title)}`,
-      `DESCRIPTION:${safe(event.description ?? "Event details in app")}`,
-      `LOCATION:${safe(event.location ?? "")}`,
-      "END:VEVENT",
-      "END:VCALENDAR",
-    ];
-    const blob = new Blob([lines.join("\r\n")], { type: "text/calendar;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${event.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "event"}.ics`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
 
   // Secret tasks are visible only to the event creator and the explicit assignee.
   // This keeps surprise/sensitive prep work private while preserving collaboration.
@@ -765,9 +733,7 @@ export default function EventPage() {
   function buildEmailChangeTemplate() {
     if (!event) return "";
 
-    const when = event.starts_at
-      ? `${new Date(event.starts_at).toLocaleString()}${event.ends_at ? ` - ${new Date(event.ends_at).toLocaleString()}` : ""}`
-      : "Time will be shared soon.";
+    const when = event.starts_at ? formatDateRange(event.starts_at, event.ends_at) : "Time will be shared soon.";
 
     return [
       `Hello,`,
@@ -1155,16 +1121,11 @@ export default function EventPage() {
                 </div>
                 {event.starts_at && (
                   <div style={{ marginTop: 6 }}>
-                    🗓 {new Date(event.starts_at).toLocaleString()}
-                    {event.ends_at ? ` — ${new Date(event.ends_at).toLocaleString()}` : ""}
+                    🗓 {formatDateTime(event.starts_at)}
+                    {event.ends_at ? ` — ${formatDateTime(event.ends_at)}` : ""}
                   </div>
                 )}
                 {event.location && <div style={{ marginTop: 6 }}>📍 {event.location}</div>}
-                <div style={{ marginTop: 10 }}>
-                  <button onClick={downloadCalendarInvite} style={btnGhostSmall}>
-                    Download calendar (.ics)
-                  </button>
-                </div>
               </div>
 
               <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
@@ -1545,7 +1506,7 @@ export default function EventPage() {
                   <div key={m.id} style={{ marginBottom: 10 }}>
                     <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
                       <b>{displayNameByUser(m.sender_id, m.full_name, m.email)}</b> •{" "}
-                      {new Date(m.created_at).toLocaleString()}
+                      {formatDateTime(m.created_at)}
                     </div>
                     <div style={{ marginTop: 3 }}>{m.body}</div>
                   </div>

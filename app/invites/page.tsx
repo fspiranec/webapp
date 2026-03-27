@@ -7,6 +7,7 @@ import { Button, Card, Stack, buttonStyle } from "@/components/ui/primitives";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { gradientPageBackground, spacing } from "@/lib/uiStyles";
 import { useIsMobile } from "@/lib/useIsMobile";
+import { formatDateTime } from "@/lib/dateTime";
 
 type InviteRow = {
   id: string;
@@ -178,7 +179,7 @@ export default function InvitesPage() {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 900 }}>{inv.events?.title ?? "Event"}</div>
                     <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
-                      {inv.accepted ? "✅ Accepted" : "Pending"} • {new Date(inv.created_at).toLocaleString()}
+                      {inv.accepted ? "✅ Accepted" : "Pending"} • {formatDateTime(inv.created_at)}
                     </div>
                   </div>
 

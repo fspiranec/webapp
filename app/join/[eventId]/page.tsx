@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Button, Card, Stack, StatusBanner } from "@/components/ui/primitives";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { gradientPageBackground, spacing } from "@/lib/uiStyles";
+import { formatDateTime } from "@/lib/dateTime";
 
 type EventRow = {
   id: string;
@@ -154,7 +155,7 @@ export default function JoinByLinkPage() {
               You are invited to join <b>{event.title}</b> ({event.type}).
             </div>
             <div style={{ color: "rgba(229,231,235,0.75)", fontSize: 13 }}>
-              {event.starts_at ? `Starts: ${new Date(event.starts_at).toLocaleString()}` : "Start time: not set"}
+              {event.starts_at ? `Starts: ${formatDateTime(event.starts_at)}` : "Start time: not set"}
               {event.location ? ` • Location: ${event.location}` : ""}
               {event.creator_name ? ` • Host: ${event.creator_name}` : ""}
             </div>

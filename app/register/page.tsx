@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Button, Card, Stack } from "@/components/ui/primitives";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { gradientPageBackground, spacing } from "@/lib/uiStyles";
 import { useIsMobile } from "@/lib/useIsMobile";
 
 // Registration screen captures profile basics and creates both auth + profile records.
@@ -89,14 +91,14 @@ export default function RegisterPage() {
 
   return (
     <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
-      <div style={{ ...cardStyle, maxWidth: isMobile ? "100%" : 520 }}>
+      <Card style={{ ...cardStyle, maxWidth: isMobile ? "100%" : 520 }}>
         <h1 style={{ marginTop: 0 }}>Create account</h1>
 
         <div style={hintStyle}>
           First name, last name and email are required. Phone is optional.
         </div>
 
-        <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+        <Stack gap={spacing.xs} style={{ marginTop: spacing.sm }}>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
             <input
               value={firstName}
@@ -139,17 +141,17 @@ export default function RegisterPage() {
             autoComplete="new-password"
           />
 
-          <button onClick={register} style={btnPrimary}>
+          <Button variant="primary" onClick={register}>
             Create account
-          </button>
+          </Button>
 
-          <button onClick={() => router.push(`/login?next=${encodeURIComponent(getNextPath())}`)} style={btnGhost}>
+          <Button onClick={() => router.push(`/login?next=${encodeURIComponent(getNextPath())}`)}>
             Back to login
-          </button>
+          </Button>
 
           {status ? <div style={statusBox(status.startsWith("✅"))}>{status}</div> : null}
-        </div>
-      </div>
+        </Stack>
+      </Card>
     </div>
   );
 }
@@ -160,8 +162,8 @@ const pageStyle: React.CSSProperties = {
   minHeight: "100vh",
   display: "grid",
   placeItems: "center",
-  padding: 24,
-  background: "linear-gradient(180deg, #0b1020 0%, #0f172a 60%, #111827 100%)",
+  padding: spacing.lg,
+  background: gradientPageBackground,
   color: "#e5e7eb",
   fontFamily: "system-ui",
 };
@@ -169,11 +171,7 @@ const pageStyle: React.CSSProperties = {
 const cardStyle: React.CSSProperties = {
   width: "100%",
   maxWidth: 520,
-  borderRadius: 18,
   padding: 18,
-  background: "rgba(255,255,255,0.06)",
-  border: "1px solid rgba(255,255,255,0.10)",
-  boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
 };
 
 const hintStyle: React.CSSProperties = {
@@ -189,26 +187,6 @@ const inputStyle: React.CSSProperties = {
   background: "rgba(17,24,39,0.65)",
   color: "#e5e7eb",
   outline: "none",
-};
-
-const btnPrimary: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "linear-gradient(90deg,#60a5fa,#a78bfa)",
-  color: "#0b1020",
-  fontWeight: 900,
-  cursor: "pointer",
-};
-
-const btnGhost: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.06)",
-  color: "#e5e7eb",
-  fontWeight: 900,
-  cursor: "pointer",
 };
 
 // Shared success/error status style helper for auth feedback banners.

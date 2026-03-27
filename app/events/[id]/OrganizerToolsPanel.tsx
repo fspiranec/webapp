@@ -171,18 +171,22 @@ export default function OrganizerToolsPanel(props: Props) {
   return (
     <>
       <div style={{ marginTop: 12 }}>
+        <div style={{ fontSize: 12, color: "rgba(229,231,235,0.75)", marginBottom: 8, fontWeight: 800 }}>Planning</div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button onClick={() => setOrganizerTab("polls")} style={organizerTab === "polls" ? btnPrimary : btnGhost}>
             Polls
           </button>
-          <button onClick={() => setOrganizerTab("event")} style={organizerTab === "event" ? btnPrimary : btnGhost}>
-            Event details
-          </button>
-          <button onClick={() => setOrganizerTab("invite")} style={organizerTab === "invite" ? btnPrimary : btnGhost}>
-            Invite
-          </button>
           <button onClick={() => setOrganizerTab("tasks")} style={organizerTab === "tasks" ? btnPrimary : btnGhost}>
             Tasks
+          </button>
+          <button onClick={() => setOrganizerTab("invite")} style={organizerTab === "invite" ? btnPrimary : btnGhost}>
+            Invite guests
+          </button>
+        </div>
+        <div style={{ fontSize: 12, color: "rgba(229,231,235,0.75)", margin: "12px 0 8px", fontWeight: 800 }}>Settings</div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button onClick={() => setOrganizerTab("event")} style={organizerTab === "event" ? btnPrimary : btnGhost}>
+            Event details
           </button>
         </div>
       </div>
@@ -208,21 +212,25 @@ export default function OrganizerToolsPanel(props: Props) {
           <Link href={`/events/${event.id}/edit`} style={{ ...btnGhost, textDecoration: "none", display: "inline-block", textAlign: "center" }}>
             Edit event
           </Link>
-          <div style={{ ...cardInsetStyle, border: "1px solid rgba(252,165,165,0.3)" }}>
-            <h3 style={{ marginTop: 0, color: "#fecaca" }}>Delete event</h3>
-            <p style={{ color: "rgba(229,231,235,0.75)" }}>Delete event (requires your password).</p>
-            <input
-              type="password"
-              value={deletePw}
-              onChange={(e) => setDeletePw(e.target.value)}
-              placeholder="Your password"
-              style={inputStyle}
-            />
-            <button onClick={deleteEventWithPassword} style={btnDanger}>
-              Delete event permanently
-            </button>
-            {deleteStatus && <div style={statusBoxStyle(deleteStatus.startsWith("✅"))}>{deleteStatus}</div>}
-          </div>
+          <details style={{ ...cardInsetStyle, border: "1px solid rgba(252,165,165,0.3)" }}>
+            <summary style={{ cursor: "pointer", color: "#fecaca", fontWeight: 900 }}>Danger zone: Delete event</summary>
+            <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+              <p style={{ color: "rgba(229,231,235,0.75)", margin: 0 }}>
+                Delete event permanently (requires your password).
+              </p>
+              <input
+                type="password"
+                value={deletePw}
+                onChange={(e) => setDeletePw(e.target.value)}
+                placeholder="Your password"
+                style={inputStyle}
+              />
+              <button onClick={deleteEventWithPassword} style={btnDanger}>
+                Delete event permanently
+              </button>
+              {deleteStatus && <div style={statusBoxStyle(deleteStatus.startsWith("✅"))}>{deleteStatus}</div>}
+            </div>
+          </details>
         </div>
       )}
 

@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Button, Card, Stack, buttonStyle } from "@/components/ui/primitives";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { gradientPageBackground, spacing } from "@/lib/uiStyles";
 import { useIsMobile } from "@/lib/useIsMobile";
 
 type FriendRow = {
@@ -187,15 +189,15 @@ export default function ProfilePage() {
             </div>
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <button style={btnGhost} onClick={() => router.push("/events")}>Events</button>
-              <button style={btnGhost} onClick={signOut}>Sign out</button>
+              <Button onClick={() => router.push("/events")}>Events</Button>
+              <Button onClick={signOut}>Sign out</Button>
             </div>
           </div>
 
           {/* Change password */}
           <div style={{ marginTop: 18 }}>
             <h2 style={{ margin: 0 }}>Change password</h2>
-            <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+            <Stack gap={spacing.xs} style={{ marginTop: spacing.sm }}>
               <input
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
@@ -210,11 +212,11 @@ export default function ProfilePage() {
                 type="password"
                 style={input}
               />
-              <button style={btnPrimary} onClick={changePassword}>
+              <Button variant="primary" onClick={changePassword}>
                 Update password
-              </button>
+              </Button>
               {pwStatus && <div style={statusBox(pwStatus.startsWith("✅"))}>{pwStatus}</div>}
-            </div>
+            </Stack>
           </div>
 
           <hr style={hr} />
@@ -226,7 +228,7 @@ export default function ProfilePage() {
               Add friends here. In events you’ll be able to invite multiple friends with checkboxes.
             </p>
 
-            <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+            <Stack gap={spacing.xs} style={{ marginTop: spacing.sm }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 <input
                   value={friendName}
@@ -242,12 +244,12 @@ export default function ProfilePage() {
                 />
               </div>
 
-              <button style={btnPrimary} onClick={addFriend}>
+              <Button variant="primary" onClick={addFriend}>
                 + Add friend
-              </button>
+              </Button>
 
               {status && <div style={statusBox(status.startsWith("✅"))}>{status}</div>}
-            </div>
+            </Stack>
 
             <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
               {friends.length === 0 ? (
@@ -296,29 +298,10 @@ function Shell({ children, isMobile }: { children: React.ReactNode; isMobile: bo
   );
 }
 
-function Card({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        borderRadius: 22,
-        padding: 20,
-        background: "rgba(255,255,255,0.06)",
-        border: "1px solid rgba(255,255,255,0.10)",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.45)",
-        color: "#e5e7eb",
-        backdropFilter: "blur(10px)",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
 const page: React.CSSProperties = {
   minHeight: "100vh",
-  background:
-    "radial-gradient(900px 500px at 50% 0%, rgba(124,58,237,0.45), transparent 60%), linear-gradient(180deg, #0b1020 0%, #0f172a 60%, #111827 100%)",
-  padding: 24,
+  background: gradientPageBackground,
+  padding: spacing.lg,
 };
 
 const input: React.CSSProperties = {
@@ -341,34 +324,10 @@ const row: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
 };
 
-const btnPrimary: React.CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.16)",
-  background: "linear-gradient(90deg,#60a5fa,#a78bfa)",
-  color: "#0b1020",
-  fontWeight: 900,
-  cursor: "pointer",
-};
-
-const btnGhost: React.CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.16)",
-  background: "rgba(255,255,255,0.06)",
-  color: "#e5e7eb",
-  fontWeight: 900,
-  cursor: "pointer",
-};
-
 const btnDanger: React.CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.16)",
+  ...buttonStyle("ghost"),
   background: "rgba(248,113,113,0.15)",
   color: "#fecaca",
-  fontWeight: 900,
-  cursor: "pointer",
 };
 
 const hr: React.CSSProperties = {

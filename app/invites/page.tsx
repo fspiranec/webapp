@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Button, Card, Stack, buttonStyle } from "@/components/ui/primitives";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { gradientPageBackground, spacing } from "@/lib/uiStyles";
 import { useIsMobile } from "@/lib/useIsMobile";
 
 type InviteRow = {
@@ -23,6 +25,7 @@ export default function InvitesPage() {
   const [userEmail, setUserEmail] = useState("");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
+  const [actingInviteId, setActingInviteId] = useState<string | null>(null);
 
   // Reads pending/accepted invite rows and keeps UI counters synchronized.
   async function load() {
@@ -60,37 +63,65 @@ export default function InvitesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function accept(inv: InviteRow) {
+  async function setRsvp(inv: InviteRow, nextRsvp: "accepted" | "maybe" | "declined") {
     setStatus("");
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
+    setActingInviteId(inv.id);
 
-    setStatus("Accepting…");
+    setStatus(nextRsvp === "accepted" ? "Accepting…" : "Saving RSVP…");
 
-    // ✅ One RPC does everything (accept + join/rejoin)
-    const { error } = await supabase.rpc("accept_event_invite", {
+    const { error: inviteErr } = await supabase.rpc("accept_event_invite", {
       invite_id: inv.id,
     });
 
-    if (error) {
-      setStatus(`❌ ${error.message}`);
+    if (inviteErr) {
+      setStatus(`❌ ${inviteErr.message}`);
+      setActingInviteId(null);
       return;
     }
 
-    setStatus("✅ Joined event!");
+    if (nextRsvp !== "accepted") {
+      const { data: sess } = await supabase.auth.getSession();
+      const userId = sess.session?.user.id;
+      if (userId) {
+        const { error: rsvpErr } = await supabase
+          .from("event_members")
+          .update({ rsvp: nextRsvp })
+          .eq("event_id", inv.event_id)
+          .eq("user_id", userId);
+        if (rsvpErr) {
+          setStatus(`⚠️ Joined, but RSVP update failed: ${rsvpErr.message}`);
+          setActingInviteId(null);
+          await load();
+          return;
+        }
+      }
+    }
+
+    setStatus(
+      nextRsvp === "accepted"
+        ? "✅ Joined event!"
+        : nextRsvp === "maybe"
+          ? "✅ RSVP saved as Maybe."
+          : "✅ RSVP saved as Can't attend."
+    );
     await load();
-    router.push(`/events/${inv.event_id}`);
+    setActingInviteId(null);
+    if (nextRsvp === "accepted" || nextRsvp === "maybe") {
+      router.push(`/events/${inv.event_id}`);
+    }
   }
 
   if (loading) {
     return (
       <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
         <Card>
-          <div style={{ display: "grid", gap: 10 }}>
+          <Stack gap={10}>
             <div style={skeletonTitle} />
             <div style={skeletonRow} />
             <div style={skeletonRow} />
-          </div>
+          </Stack>
         </Card>
       </div>
     );
@@ -131,7 +162,7 @@ export default function InvitesPage() {
             </div>
           )}
 
-          <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
+          <Stack gap={10} style={{ marginTop: spacing.sm }}>
             {invites.length === 0 ? (
               <div style={{ color: "rgba(229,231,235,0.75)" }}>No invites yet.</div>
             ) : (
@@ -152,14 +183,26 @@ export default function InvitesPage() {
                   </div>
 
                   {!inv.accepted ? (
-                    <button onClick={() => accept(inv)} style={btnPrimary}>
-                      Accept
-                    </button>
+                    <div style={{ display: "grid", gap: 8, gridTemplateColumns: isMobile ? "1fr" : "repeat(3, auto)" }}>
+                      <Button
+                        variant="primary"
+                        onClick={() => setRsvp(inv, "accepted")}
+                        disabled={actingInviteId === inv.id}
+                      >
+                        {actingInviteId === inv.id ? "Saving..." : "Yes"}
+                      </Button>
+                      <Button onClick={() => setRsvp(inv, "maybe")} disabled={actingInviteId === inv.id}>
+                        Maybe
+                      </Button>
+                      <Button onClick={() => setRsvp(inv, "declined")} disabled={actingInviteId === inv.id}>
+                        No
+                      </Button>
+                    </div>
                   ) : (
                     <Link
                       href={`/events/${inv.event_id}`}
                       style={{
-                        ...btnPrimary,
+                        ...buttonStyle("primary"),
                         textDecoration: "none",
                         display: "inline-block",
                         textAlign: "center",
@@ -171,33 +214,17 @@ export default function InvitesPage() {
                 </div>
               ))
             )}
-          </div>
+          </Stack>
         </Card>
       </div>
     </div>
   );
 }
 
-function Card({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        borderRadius: 18,
-        padding: 18,
-        background: "rgba(255,255,255,0.06)",
-        border: "1px solid rgba(255,255,255,0.10)",
-        boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
 const pageStyle: React.CSSProperties = {
   minHeight: "100vh",
-  background: "linear-gradient(180deg, #0b1020 0%, #0f172a 60%, #111827 100%)",
-  padding: 24,
+  background: gradientPageBackground,
+  padding: spacing.lg,
 };
 
 const rowStyle: React.CSSProperties = {
@@ -208,16 +235,6 @@ const rowStyle: React.CSSProperties = {
   borderRadius: 14,
   background: "rgba(255,255,255,0.05)",
   border: "1px solid rgba(255,255,255,0.10)",
-};
-
-const btnPrimary: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "linear-gradient(90deg,#60a5fa,#a78bfa)",
-  color: "#0b1020",
-  fontWeight: 900,
-  cursor: "pointer",
 };
 
 const skeletonTitle: React.CSSProperties = {

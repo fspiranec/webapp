@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Button, Card, Stack, StatusBanner } from "@/components/ui/primitives";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { gradientPageBackground, spacing } from "@/lib/uiStyles";
 import { useIsMobile } from "@/lib/useIsMobile";
 
 type EventType = "grill" | "birthday" | "other";
@@ -144,13 +146,7 @@ export default function NewEventPage() {
   }
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "linear-gradient(180deg, #0b1020 0%, #0f172a 60%, #111827 100%)",
-        padding: isMobile ? 16 : 24,
-      }}
-    >
+    <div style={{ minHeight: "100vh", background: gradientPageBackground, padding: isMobile ? 16 : 24 }}>
       <div
         style={{
           maxWidth: isMobile ? "100%" : 720,
@@ -163,22 +159,13 @@ export default function NewEventPage() {
           ← Back to events
         </Link>
 
-        <div
-          style={{
-            marginTop: 14,
-            borderRadius: 18,
-            padding: 18,
-            background: "rgba(255,255,255,0.06)",
-            border: "1px solid rgba(255,255,255,0.10)",
-            boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
-          }}
-        >
+        <Card style={{ marginTop: spacing.sm, padding: 18 }}>
           <h1 style={{ margin: 0, fontSize: 28 }}>Create event</h1>
           <p style={{ marginTop: 8, color: "rgba(229,231,235,0.8)" }}>
             Make a grill party, birthday (surprise mode), or any event.
           </p>
 
-          <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
+          <Stack gap={12} style={{ marginTop: spacing.md }}>
             <Field label="Title">
               <input
                 value={title}
@@ -241,43 +228,29 @@ export default function NewEventPage() {
               />
             </Field>
 
-            <button
+            <Button
+              variant="primary"
               onClick={createEvent}
               disabled={saving || !title.trim()}
               style={{
-                padding: "11px 14px",
-                borderRadius: 12,
-                border: "1px solid rgba(255,255,255,0.14)",
                 background: saving || !title.trim() ? "rgba(148,163,184,0.25)" : "linear-gradient(90deg,#60a5fa,#a78bfa)",
-                color: "#0b1020",
-                fontWeight: 700,
                 cursor: saving || !title.trim() ? "not-allowed" : "pointer",
               }}
             >
               {saving ? "Creating..." : "Create event"}
-            </button>
+            </Button>
 
             {status && (
-              <div
-                role="status"
-                aria-live="polite"
-                style={{
-                  padding: 12,
-                  borderRadius: 12,
-                  background: "rgba(255,255,255,0.06)",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  color: status.startsWith("✅") ? "#86efac" : "#fca5a5",
-                }}
-              >
+              <StatusBanner tone={status.startsWith("✅") ? "success" : "error"}>
                 {status}
-              </div>
+              </StatusBanner>
             )}
 
             <div style={{ color: "rgba(229,231,235,0.7)", fontSize: 13 }}>
               Tip: Birthday type automatically enables <b>full surprise mode</b>.
             </div>
-          </div>
-        </div>
+          </Stack>
+        </Card>
       </div>
     </div>
   );

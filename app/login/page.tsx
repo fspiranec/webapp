@@ -2,7 +2,9 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Button, Card, Stack } from "@/components/ui/primitives";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { gradientPageBackground, spacing } from "@/lib/uiStyles";
 import { useIsMobile } from "@/lib/useIsMobile";
 
 // Login screen supports email/password and Google OAuth flows.
@@ -97,12 +99,12 @@ export default function LoginPage() {
 
   return (
     <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
-      <div style={{ ...cardStyle, maxWidth: isMobile ? "100%" : 460 }}>
+      <Card style={{ ...cardStyle, maxWidth: isMobile ? "100%" : 460 }}>
         <h1 style={{ marginTop: 0 }}>Login</h1>
 
         <div style={hintStyle}>Existing users login here.</div>
 
-        <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+        <Stack gap={spacing.xs} style={{ marginTop: spacing.sm }}>
           <label htmlFor="login-email" style={srOnly}>Email</label>
           <input
             id="login-email"
@@ -123,9 +125,9 @@ export default function LoginPage() {
             autoComplete="current-password"
           />
 
-          <button onClick={login} style={btnPrimary} disabled={passwordLoading || oauthLoading}>
+          <Button variant="primary" onClick={login} disabled={passwordLoading || oauthLoading}>
             {passwordLoading ? "Signing in..." : "Sign in"}
-          </button>
+          </Button>
 
           <div style={dividerStyle}>
             <span style={dividerLabelStyle}>or</span>
@@ -146,17 +148,17 @@ export default function LoginPage() {
             <span>{oauthLoading ? "Redirecting..." : "Continue with Google"}</span>
           </button>
 
-          <button type="button" onClick={() => router.push(`/register?next=${encodeURIComponent(getNextPath())}`)} style={btnGhost}>
+          <Button type="button" onClick={() => router.push(`/register?next=${encodeURIComponent(getNextPath())}`)}>
             New user? Create account
-          </button>
+          </Button>
 
-          <button type="button" onClick={() => router.push("/")} style={btnGhost}>
+          <Button type="button" onClick={() => router.push("/")}>
             Back to home
-          </button>
+          </Button>
 
           {status ? <div role="status" aria-live="polite" style={statusBox(status.startsWith("✅"))}>{status}</div> : null}
-        </div>
-      </div>
+        </Stack>
+      </Card>
     </div>
   );
 }
@@ -168,8 +170,8 @@ const pageStyle: React.CSSProperties = {
   minHeight: "100vh",
   display: "grid",
   placeItems: "center",
-  padding: 24,
-  background: "linear-gradient(180deg, #0b1020 0%, #0f172a 60%, #111827 100%)",
+  padding: spacing.lg,
+  background: gradientPageBackground,
   color: "#e5e7eb",
   fontFamily: "system-ui",
 };
@@ -177,11 +179,7 @@ const pageStyle: React.CSSProperties = {
 const cardStyle: React.CSSProperties = {
   width: "100%",
   maxWidth: 460,
-  borderRadius: 18,
   padding: 18,
-  background: "rgba(255,255,255,0.06)",
-  border: "1px solid rgba(255,255,255,0.10)",
-  boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
 };
 
 const hintStyle: React.CSSProperties = {
@@ -199,16 +197,6 @@ const inputStyle: React.CSSProperties = {
   outline: "none",
 };
 
-const btnPrimary: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "linear-gradient(90deg,#60a5fa,#a78bfa)",
-  color: "#0b1020",
-  fontWeight: 900,
-  cursor: "pointer",
-};
-
 /* ✅ Google button style */
 const btnGoogle: React.CSSProperties = {
   display: "flex",
@@ -224,16 +212,6 @@ const btnGoogle: React.CSSProperties = {
   fontSize: 14,
   cursor: "pointer",
   transition: "background 0.2s ease",
-};
-
-const btnGhost: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.06)",
-  color: "#e5e7eb",
-  fontWeight: 900,
-  cursor: "pointer",
 };
 
 const dividerStyle: React.CSSProperties = {

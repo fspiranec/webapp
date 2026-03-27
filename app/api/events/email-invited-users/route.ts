@@ -18,6 +18,8 @@ const MAX_RECIPIENTS_PER_REQUEST = 100;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 5;
 const senderRateMap = new Map<string, number[]>();
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 function escapeHtml(value: string) {
   return value
@@ -64,6 +66,28 @@ export async function POST(req: Request) {
       { error: "Missing BREVO_API_KEY or BREVO_SENDER_EMAIL environment variable" },
       { status: 500 }
     );
+  }
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return NextResponse.json(
+      { error: "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable" },
+      { status: 500 }
+    );
+  }
+
+  const authHeader = req.headers.get("authorization") ?? "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length).trim() : "";
+  if (!token) {
+    return NextResponse.json({ error: "Unauthorized: missing bearer token" }, { status: 401 });
+  }
+
+  const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!userRes.ok) {
+    return NextResponse.json({ error: "Unauthorized: invalid user token" }, { status: 401 });
   }
 
   let body: EmailInvitedUsersRequest;

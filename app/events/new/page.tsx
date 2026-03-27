@@ -7,6 +7,31 @@ import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useIsMobile } from "@/lib/useIsMobile";
 
 type EventType = "grill" | "birthday" | "other";
+type TemplateKey = "blank" | "birthday-surprise" | "grill-weekend" | "team-hangout";
+
+const EVENT_TEMPLATES: Record<
+  Exclude<TemplateKey, "blank">,
+  { title: string; type: EventType; description: string; location: string }
+> = {
+  "birthday-surprise": {
+    title: "Birthday surprise party 🎉",
+    type: "birthday",
+    description: "Keep this event secret. Add tasks for cake, decorations, and arrival coordination.",
+    location: "Host's place",
+  },
+  "grill-weekend": {
+    title: "Weekend grill party 🔥",
+    type: "grill",
+    description: "Bring your favorite sides and drinks. Use the items list for shared groceries.",
+    location: "Backyard / park",
+  },
+  "team-hangout": {
+    title: "Team hangout",
+    type: "other",
+    description: "Casual meetup with polls for date/time and a task board for planning.",
+    location: "TBD",
+  },
+};
 
 // Dedicated event-creation form for richer setup than the quick-create flow.
 export default function NewEventPage() {
@@ -14,6 +39,7 @@ export default function NewEventPage() {
   const isMobile = useIsMobile();
 
   const [title, setTitle] = useState("");
+  const [template, setTemplate] = useState<TemplateKey>("blank");
   const [type, setType] = useState<EventType>("grill");
   const [startsAt, setStartsAt] = useState(""); // datetime-local
   const [endsAt, setEndsAt] = useState("");
@@ -107,6 +133,16 @@ export default function NewEventPage() {
     }
   }
 
+  function applyTemplate(nextTemplate: TemplateKey) {
+    setTemplate(nextTemplate);
+    if (nextTemplate === "blank") return;
+    const tpl = EVENT_TEMPLATES[nextTemplate];
+    setTitle(tpl.title);
+    setType(tpl.type);
+    setDescription(tpl.description);
+    setLocation(tpl.location);
+  }
+
   return (
     <div
       style={{
@@ -150,6 +186,15 @@ export default function NewEventPage() {
                 placeholder="e.g. Grill party at my place"
                 style={inputStyle}
               />
+            </Field>
+
+            <Field label="Quick template">
+              <select value={template} onChange={(e) => applyTemplate(e.target.value as TemplateKey)} style={inputStyle}>
+                <option value="blank">Blank event</option>
+                <option value="birthday-surprise">Birthday surprise</option>
+                <option value="grill-weekend">Weekend grill</option>
+                <option value="team-hangout">Team hangout</option>
+              </select>
             </Field>
 
             <Field label="Type">

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useIsMobile } from "@/lib/useIsMobile";
 import PollsCard from "./PollsCard";
@@ -199,6 +200,38 @@ export default function EventPage() {
     if (!supabase || !event?.cover_image_path) return "";
     return supabase.storage.from(EVENT_IMAGE_BUCKET).getPublicUrl(event.cover_image_path).data.publicUrl;
   }, [event?.cover_image_path]);
+
+  function downloadCalendarInvite() {
+    if (!event) return;
+    const fmt = (iso: string) => iso.replace(/[-:]/g, "").split(".")[0] + "Z";
+    const starts = event.starts_at ? new Date(event.starts_at).toISOString() : new Date().toISOString();
+    const ends = event.ends_at
+      ? new Date(event.ends_at).toISOString()
+      : new Date(new Date(starts).getTime() + 60 * 60 * 1000).toISOString();
+    const safe = (v: string) => v.replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
+    const lines = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Event Planner//EN",
+      "BEGIN:VEVENT",
+      `UID:${event.id}@event-planner`,
+      `DTSTAMP:${fmt(new Date().toISOString())}`,
+      `DTSTART:${fmt(starts)}`,
+      `DTEND:${fmt(ends)}`,
+      `SUMMARY:${safe(event.title)}`,
+      `DESCRIPTION:${safe(event.description ?? "Event details in app")}`,
+      `LOCATION:${safe(event.location ?? "")}`,
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ];
+    const blob = new Blob([lines.join("\r\n")], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${event.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "event"}.ics`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
 
   // Secret tasks are visible only to the event creator and the explicit assignee.
@@ -832,6 +865,11 @@ export default function EventPage() {
     if (!event) return;
 
     setEmailAllStatus("");
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) {
+      setEmailAllStatus("❌ Supabase not ready");
+      return;
+    }
 
     const recipientEmails = Array.from(new Set(invites.map((inv) => inv.email.trim().toLowerCase()).filter(Boolean)));
     if (recipientEmails.length === 0) {
@@ -842,9 +880,15 @@ export default function EventPage() {
     setEmailAllStatus("Sending email…");
 
     try {
+      const { data: sessionRes } = await supabase.auth.getSession();
+      const token = sessionRes.session?.access_token;
+      if (!token) {
+        setEmailAllStatus("❌ Please sign in again before sending emails");
+        return;
+      }
       const response = await fetch("/api/events/email-invited-users", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           eventId,
           eventTitle: event.title,
@@ -1118,9 +1162,9 @@ export default function EventPage() {
     return (
       <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
         <Card>
-          <a href="/events" style={linkStyle}>
+          <Link href="/events" style={linkStyle}>
             ← Back
-          </a>
+          </Link>
           <h2 style={{ marginTop: 10 }}>Event not found</h2>
           {status && <p style={{ color: "#fca5a5" }}>{status}</p>}
         </Card>
@@ -1144,9 +1188,9 @@ export default function EventPage() {
           fontFamily: "system-ui",
         }}
       >
-        <a href="/events" style={linkStyle}>
+        <Link href="/events" style={linkStyle}>
           ← Back to events
-        </a>
+        </Link>
 
         {/* Top area: event metadata plus creator-only destructive controls. */}
         <div style={topLayoutStyle}>
@@ -1165,6 +1209,11 @@ export default function EventPage() {
                   </div>
                 )}
                 {event.location && <div style={{ marginTop: 6 }}>📍 {event.location}</div>}
+                <div style={{ marginTop: 10 }}>
+                  <button onClick={downloadCalendarInvite} style={btnGhostSmall}>
+                    Download calendar (.ics)
+                  </button>
+                </div>
               </div>
 
               <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
@@ -1174,12 +1223,12 @@ export default function EventPage() {
                   </>
                 ) : null}
                 <div style={{ marginTop: 6 }}>
-                  <a href="/profile" style={navLink}>
+                  <Link href="/profile" style={navLink}>
                     Profile
-                  </a>{" "}
-                  <a href="/invites" style={navLink}>
+                  </Link>{" "}
+                  <Link href="/invites" style={navLink}>
                     Invites{pendingMyInvites > 0 ? ` (${pendingMyInvites}) 🔔` : ""}
-                  </a>
+                  </Link>
                 </div>
               </div>
 
@@ -1284,9 +1333,9 @@ export default function EventPage() {
                   {friends.length === 0 ? (
                     <div style={{ color: "rgba(229,231,235,0.75)" }}>
                       No friends yet. Add them in{" "}
-                      <a href="/profile" style={navLink}>
+                      <Link href="/profile" style={navLink}>
                         /profile
-                      </a>
+                      </Link>
                       .
                     </div>
                   ) : (
@@ -1485,40 +1534,12 @@ export default function EventPage() {
         {/* ✅ AUTO-FIT grid: becomes 1 col on mobile, 2/3/4 on bigger screens */}
         <div style={twoColumnLayoutStyle}>
           <div style={columnStack}>
-            {/* Membership panel: who joined and member-specific quick actions (leave for non-creators). */}
-            <Card>
-              <h2 style={{ marginTop: 0 }}>People arriving ({compactPeopleRows.length})</h2>
-              <div style={{ display: "grid", gap: 10 }}>
-                {compactPeopleRows.length === 0 ? (
-                  <div style={{ color: "rgba(229,231,235,0.75)" }}>No people yet.</div>
-                ) : (
-                  <div style={peopleListStyle}>
-                    {compactPeopleRows.map((p) => (
-                      <div key={p.key} style={compactPersonRowStyle}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            {p.label}
-                          </div>
-                          {p.meta && (
-                            <div style={{ fontSize: 11, color: "rgba(229,231,235,0.65)", marginTop: 2 }}>{p.meta}</div>
-                          )}
-                        </div>
-                        <span style={compactStatusStyle(p.status)}>{p.status}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {!isCreator && (
-                  <div style={{ marginTop: 8 }}>
-                    <button onClick={leaveEvent} style={btnDanger}>
-                      Leave event
-                    </button>
-                    {leaveStatus && <div style={statusBoxStyle(leaveStatus.startsWith("✅"))}>{leaveStatus}</div>}
-                  </div>
-                )}
-              </div>
-            </Card>
+            <PeoplePanel
+              rows={compactPeopleRows}
+              isCreator={!!isCreator}
+              onLeave={leaveEvent}
+              leaveStatus={leaveStatus}
+            />
           </div>
 
           {/* Collaboration tools column: polls for decisions + tasks for execution planning. */}
@@ -1798,6 +1819,52 @@ export default function EventPage() {
 /* ================= STYLES ================= */
 
 // Shared card wrapper keeps visual rhythm and reduces repeated style declarations across sections.
+function PeoplePanel({
+  rows,
+  isCreator,
+  onLeave,
+  leaveStatus,
+}: {
+  rows: Array<{ key: string; label: string; meta: string; status: "Confirmed" }>;
+  isCreator: boolean;
+  onLeave: () => void;
+  leaveStatus: string;
+}) {
+  return (
+    <Card>
+      <h2 style={{ marginTop: 0 }}>People arriving ({rows.length})</h2>
+      <div style={{ display: "grid", gap: 10 }}>
+        {rows.length === 0 ? (
+          <div style={{ color: "rgba(229,231,235,0.75)" }}>No people yet.</div>
+        ) : (
+          <div style={peopleListStyle}>
+            {rows.map((p) => (
+              <div key={p.key} style={compactPersonRowStyle}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {p.label}
+                  </div>
+                  {p.meta && <div style={{ fontSize: 11, color: "rgba(229,231,235,0.65)", marginTop: 2 }}>{p.meta}</div>}
+                </div>
+                <span style={compactStatusStyle(p.status)}>{p.status}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!isCreator && (
+          <div style={{ marginTop: 8 }}>
+            <button onClick={onLeave} style={btnDanger}>
+              Leave event
+            </button>
+            {leaveStatus && <div style={statusBoxStyle(leaveStatus.startsWith("✅"))}>{leaveStatus}</div>}
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 function Card({ children }: { children: React.ReactNode }) {
   return (
     <div

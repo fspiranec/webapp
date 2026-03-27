@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useIsMobile } from "@/lib/useIsMobile";
 import PollsCard from "./PollsCard";
@@ -83,6 +84,7 @@ type MemberRow = {
   user_id: string;
   full_name: string | null;
   email: string | null;
+  rsvp: "accepted" | "maybe" | "declined" | null;
 };
 
 type MsgRow = {
@@ -163,6 +165,7 @@ export default function EventPage() {
 
   // Leave event
   const [leaveStatus, setLeaveStatus] = useState("");
+  const [rsvpStatus, setRsvpStatus] = useState("");
 
   // Chat
   const [chatTab, setChatTab] = useState<"general" | "secret">("general");
@@ -199,6 +202,38 @@ export default function EventPage() {
     if (!supabase || !event?.cover_image_path) return "";
     return supabase.storage.from(EVENT_IMAGE_BUCKET).getPublicUrl(event.cover_image_path).data.publicUrl;
   }, [event?.cover_image_path]);
+
+  function downloadCalendarInvite() {
+    if (!event) return;
+    const fmt = (iso: string) => iso.replace(/[-:]/g, "").split(".")[0] + "Z";
+    const starts = event.starts_at ? new Date(event.starts_at).toISOString() : new Date().toISOString();
+    const ends = event.ends_at
+      ? new Date(event.ends_at).toISOString()
+      : new Date(new Date(starts).getTime() + 60 * 60 * 1000).toISOString();
+    const safe = (v: string) => v.replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
+    const lines = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Event Planner//EN",
+      "BEGIN:VEVENT",
+      `UID:${event.id}@event-planner`,
+      `DTSTAMP:${fmt(new Date().toISOString())}`,
+      `DTSTART:${fmt(starts)}`,
+      `DTEND:${fmt(ends)}`,
+      `SUMMARY:${safe(event.title)}`,
+      `DESCRIPTION:${safe(event.description ?? "Event details in app")}`,
+      `LOCATION:${safe(event.location ?? "")}`,
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ];
+    const blob = new Blob([lines.join("\r\n")], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${event.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "event"}.ics`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
 
   // Secret tasks are visible only to the event creator and the explicit assignee.
@@ -244,43 +279,33 @@ export default function EventPage() {
     return friends.filter((f) => ids.includes(f.id));
   }, [selectedFriendIds, friends]);
 
+  const myMember = useMemo(() => {
+    if (!me) return null;
+    return members.find((m) => m.user_id === me.id) ?? null;
+  }, [members, me]);
+
   const compactPeopleRows = useMemo(() => {
     const rows: Array<{
       key: string;
       label: string;
       meta: string;
-      status: "Joined" | "Accepted invite" | "Pending invite";
-      priority: number;
+      status: "Confirmed";
     }> = [];
 
-    const memberEmails = new Set<string>();
     for (const m of members) {
-      if (m.email) memberEmails.add(m.email.toLowerCase());
+      if (m.rsvp && m.rsvp !== "accepted") continue;
       rows.push({
         key: `member-${m.user_id}`,
         label: displayNameByUser(m.user_id, m.full_name, m.email),
         meta: [m.email, m.user_id === event?.creator_id ? "creator" : "", m.user_id === me?.id ? "you" : ""]
           .filter(Boolean)
           .join(" • "),
-        status: "Joined",
-        priority: 0,
+        status: "Confirmed",
       });
     }
 
-    for (const inv of invites) {
-      const email = inv.email.toLowerCase();
-      if (memberEmails.has(email)) continue;
-      rows.push({
-        key: `invite-${inv.id}`,
-        label: inv.email,
-        meta: new Date(inv.created_at).toLocaleDateString(),
-        status: inv.accepted ? "Accepted invite" : "Pending invite",
-        priority: inv.accepted ? 1 : 2,
-      });
-    }
-
-    return rows.sort((a, b) => a.priority - b.priority || a.label.localeCompare(b.label));
-  }, [members, invites, event?.creator_id, me?.id]);
+    return rows.sort((a, b) => a.label.localeCompare(b.label));
+  }, [members, event?.creator_id, me?.id]);
 
   // Resets bulk selection after a successful invite operation.
   function clearSelected() {
@@ -309,6 +334,7 @@ export default function EventPage() {
     setEmailAllStatus("");
     setDeleteStatus("");
     setLeaveStatus("");
+    setRsvpStatus("");
     setChatStatus("");
     setTaskStatusMsg("");
 
@@ -416,8 +442,9 @@ export default function EventPage() {
     });
 
     // Members list
-    const mem = await supabase.from("event_members").select("user_id").eq("event_id", eventId);
-    const memberIds = (mem.data ?? []).map((m: any) => m.user_id);
+    const mem = await supabase.from("event_members").select("user_id,rsvp").eq("event_id", eventId);
+    const memberRows = (mem.data ?? []) as Array<{ user_id: string; rsvp: "accepted" | "maybe" | "declined" | null }>;
+    const memberIds = memberRows.map((m) => m.user_id);
 
     const memberProfilesMap = new Map<string, { full_name: string | null; email: string | null }>();
     if (memberIds.length > 0) {
@@ -430,12 +457,14 @@ export default function EventPage() {
     }
 
     setMembers(
-      memberIds.map((uid: string) => {
+      memberRows.map((member) => {
+        const uid = member.user_id;
         const prof = memberProfilesMap.get(uid);
         return {
           user_id: uid,
           full_name: prof?.full_name ?? null,
           email: uid === user.id ? user.email ?? prof?.email ?? null : prof?.email ?? null,
+          rsvp: member.rsvp ?? "accepted",
         };
       })
     );
@@ -848,6 +877,11 @@ export default function EventPage() {
     if (!event) return;
 
     setEmailAllStatus("");
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) {
+      setEmailAllStatus("❌ Supabase not ready");
+      return;
+    }
 
     const recipientEmails = Array.from(new Set(invites.map((inv) => inv.email.trim().toLowerCase()).filter(Boolean)));
     if (recipientEmails.length === 0) {
@@ -858,9 +892,15 @@ export default function EventPage() {
     setEmailAllStatus("Sending email…");
 
     try {
+      const { data: sessionRes } = await supabase.auth.getSession();
+      const token = sessionRes.session?.access_token;
+      if (!token) {
+        setEmailAllStatus("❌ Please sign in again before sending emails");
+        return;
+      }
       const response = await fetch("/api/events/email-invited-users", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           eventId,
           eventTitle: event.title,
@@ -920,6 +960,26 @@ export default function EventPage() {
 
     setLeaveStatus("✅ Left event. Invite kept so you can rejoin from Invites.");
     router.push("/invites");
+  }
+
+  async function updateMyRsvp(nextRsvp: "accepted" | "maybe" | "declined") {
+    if (!me) return;
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    setRsvpStatus("Updating RSVP…");
+    const res = await supabase
+      .from("event_members")
+      .update({ rsvp: nextRsvp })
+      .eq("event_id", eventId)
+      .eq("user_id", me.id);
+
+    if (res.error) {
+      setRsvpStatus(`❌ ${res.error.message}`);
+      return;
+    }
+    setRsvpStatus("✅ RSVP updated");
+    await loadAll({ background: true });
   }
 
   /* ================= DELETE EVENT (creator + password required) ================= */
@@ -1134,9 +1194,9 @@ export default function EventPage() {
     return (
       <div style={{ ...pageStyle, padding: isMobile ? 16 : 24 }}>
         <Card>
-          <a href="/events" style={linkStyle}>
+          <Link href="/events" style={linkStyle}>
             ← Back
-          </a>
+          </Link>
           <h2 style={{ marginTop: 10 }}>Event not found</h2>
           {status && <p style={{ color: "#fca5a5" }}>{status}</p>}
         </Card>
@@ -1160,9 +1220,9 @@ export default function EventPage() {
           fontFamily: "system-ui",
         }}
       >
-        <a href="/events" style={linkStyle}>
+        <Link href="/events" style={linkStyle}>
           ← Back to events
-        </a>
+        </Link>
 
         {/* Top area: event metadata plus creator-only destructive controls. */}
         <div style={topLayoutStyle}>
@@ -1181,6 +1241,11 @@ export default function EventPage() {
                   </div>
                 )}
                 {event.location && <div style={{ marginTop: 6 }}>📍 {event.location}</div>}
+                <div style={{ marginTop: 10 }}>
+                  <button onClick={downloadCalendarInvite} style={btnGhostSmall}>
+                    Download calendar (.ics)
+                  </button>
+                </div>
               </div>
 
               <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
@@ -1190,12 +1255,12 @@ export default function EventPage() {
                   </>
                 ) : null}
                 <div style={{ marginTop: 6 }}>
-                  <a href="/profile" style={navLink}>
+                  <Link href="/profile" style={navLink}>
                     Profile
-                  </a>{" "}
-                  <a href="/invites" style={navLink}>
+                  </Link>{" "}
+                  <Link href="/invites" style={navLink}>
                     Invites{pendingMyInvites > 0 ? ` (${pendingMyInvites}) 🔔` : ""}
-                  </a>
+                  </Link>
                 </div>
               </div>
 
@@ -1300,9 +1365,9 @@ export default function EventPage() {
                   {friends.length === 0 ? (
                     <div style={{ color: "rgba(229,231,235,0.75)" }}>
                       No friends yet. Add them in{" "}
-                      <a href="/profile" style={navLink}>
+                      <Link href="/profile" style={navLink}>
                         /profile
-                      </a>
+                      </Link>
                       .
                     </div>
                   ) : (
@@ -1501,40 +1566,15 @@ export default function EventPage() {
         {/* ✅ AUTO-FIT grid: becomes 1 col on mobile, 2/3/4 on bigger screens */}
         <div style={twoColumnLayoutStyle}>
           <div style={columnStack}>
-            {/* Membership panel: who joined and member-specific quick actions (leave for non-creators). */}
-            <Card>
-              <h2 style={{ marginTop: 0 }}>People ({compactPeopleRows.length})</h2>
-              <div style={{ display: "grid", gap: 10 }}>
-                {compactPeopleRows.length === 0 ? (
-                  <div style={{ color: "rgba(229,231,235,0.75)" }}>No people yet.</div>
-                ) : (
-                  <div style={peopleListStyle}>
-                    {compactPeopleRows.map((p) => (
-                      <div key={p.key} style={compactPersonRowStyle}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            {p.label}
-                          </div>
-                          {p.meta && (
-                            <div style={{ fontSize: 11, color: "rgba(229,231,235,0.65)", marginTop: 2 }}>{p.meta}</div>
-                          )}
-                        </div>
-                        <span style={compactStatusStyle(p.status)}>{p.status}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {!isCreator && (
-                  <div style={{ marginTop: 8 }}>
-                    <button onClick={leaveEvent} style={btnDanger}>
-                      Leave event
-                    </button>
-                    {leaveStatus && <div style={statusBoxStyle(leaveStatus.startsWith("✅"))}>{leaveStatus}</div>}
-                  </div>
-                )}
-              </div>
-            </Card>
+            <PeoplePanel
+              rows={compactPeopleRows}
+              isCreator={!!isCreator}
+              onLeave={leaveEvent}
+              leaveStatus={leaveStatus}
+              myRsvp={myMember?.rsvp ?? "accepted"}
+              onRsvpChange={updateMyRsvp}
+              rsvpStatus={rsvpStatus}
+            />
           </div>
 
           {/* Collaboration tools column: polls for decisions + tasks for execution planning. */}
@@ -1814,6 +1854,69 @@ export default function EventPage() {
 /* ================= STYLES ================= */
 
 // Shared card wrapper keeps visual rhythm and reduces repeated style declarations across sections.
+function PeoplePanel({
+  rows,
+  isCreator,
+  onLeave,
+  leaveStatus,
+  myRsvp,
+  onRsvpChange,
+  rsvpStatus,
+}: {
+  rows: Array<{ key: string; label: string; meta: string; status: "Confirmed" }>;
+  isCreator: boolean;
+  onLeave: () => void;
+  leaveStatus: string;
+  myRsvp: "accepted" | "maybe" | "declined" | null;
+  onRsvpChange: (next: "accepted" | "maybe" | "declined") => void;
+  rsvpStatus: string;
+}) {
+  return (
+    <Card>
+      <h2 style={{ marginTop: 0 }}>People arriving ({rows.length})</h2>
+      <div style={{ display: "grid", gap: 10 }}>
+        {rows.length === 0 ? (
+          <div style={{ color: "rgba(229,231,235,0.75)" }}>No people yet.</div>
+        ) : (
+          <div style={peopleListStyle}>
+            {rows.map((p) => (
+              <div key={p.key} style={compactPersonRowStyle}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {p.label}
+                  </div>
+                  {p.meta && <div style={{ fontSize: 11, color: "rgba(229,231,235,0.65)", marginTop: 2 }}>{p.meta}</div>}
+                </div>
+                <span style={compactStatusStyle(p.status)}>{p.status}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!isCreator && (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)", marginBottom: 6 }}>Your RSVP</div>
+            <select
+              value={myRsvp ?? "accepted"}
+              onChange={(e) => onRsvpChange(e.target.value as "accepted" | "maybe" | "declined")}
+              style={inputStyle}
+            >
+              <option value="accepted">Accepted (I am coming)</option>
+              <option value="maybe">Maybe</option>
+              <option value="declined">Declined</option>
+            </select>
+            {rsvpStatus && <div style={statusBoxStyle(rsvpStatus.startsWith("✅"))}>{rsvpStatus}</div>}
+            <button onClick={onLeave} style={btnDanger}>
+              Leave event
+            </button>
+            {leaveStatus && <div style={statusBoxStyle(leaveStatus.startsWith("✅"))}>{leaveStatus}</div>}
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 function Card({ children }: { children: React.ReactNode }) {
   return (
     <div
@@ -2094,8 +2197,8 @@ const eventCoverStyle: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
 };
 
-function compactStatusStyle(status: "Joined" | "Accepted invite" | "Pending invite"): React.CSSProperties {
-  const color = status === "Joined" ? "#86efac" : status === "Accepted invite" ? "#93c5fd" : "#fcd34d";
+function compactStatusStyle(status: "Confirmed"): React.CSSProperties {
+  const color = "#86efac";
   return {
     fontSize: 11,
     padding: "3px 8px",

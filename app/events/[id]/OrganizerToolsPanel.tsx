@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import PollsCard from "./PollsCard";
+import { formatDateTime } from "@/lib/dateTime";
 import type {
   FriendRow,
   InviteRow,
@@ -337,7 +338,7 @@ export default function OrganizerToolsPanel(props: Props) {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 900 }}>{inv.email}</div>
                   <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
-                    {inv.accepted ? "✅ Accepted" : "Pending"} • {new Date(inv.created_at).toLocaleString()}
+                    {inv.accepted ? "✅ Accepted" : "Pending"} • {formatDateTime(inv.created_at)}
                   </div>
                 </div>
                 <button style={btnDangerSmall} onClick={() => uninvite(inv.id)}>

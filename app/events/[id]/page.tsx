@@ -6,6 +6,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useIsMobile } from "@/lib/useIsMobile";
+import { formatDateRange, formatDateTime } from "@/lib/dateTime";
 import PollsCard from "./PollsCard";
 import type {
   ClaimRow,
@@ -765,9 +766,7 @@ export default function EventPage() {
   function buildEmailChangeTemplate() {
     if (!event) return "";
 
-    const when = event.starts_at
-      ? `${new Date(event.starts_at).toLocaleString()}${event.ends_at ? ` - ${new Date(event.ends_at).toLocaleString()}` : ""}`
-      : "Time will be shared soon.";
+    const when = event.starts_at ? formatDateRange(event.starts_at, event.ends_at) : "Time will be shared soon.";
 
     return [
       `Hello,`,
@@ -1142,11 +1141,12 @@ export default function EventPage() {
           ← Back to events
         </Link>
 
-        {/* Top area: event metadata plus creator-only destructive controls. */}
-        <div style={topLayoutStyle}>
-          {/* Event summary card: title, schedule, location, quick navigation links. */}
-          <Card>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap" }}>
+        <div style={mainSectionStackStyle}>
+          {/* Top area: event metadata plus creator-only destructive controls. */}
+          <div style={topLayoutStyle}>
+            {/* Event summary card: title, schedule, location, quick navigation links. */}
+            <Card>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap" }}>
               <div style={{ flex: 1, minWidth: 280 }}>
                 <h1 style={{ margin: 0 }}>{event.title}</h1>
                 <div style={{ color: "rgba(229,231,235,0.75)", marginTop: 6 }}>
@@ -1154,8 +1154,8 @@ export default function EventPage() {
                 </div>
                 {event.starts_at && (
                   <div style={{ marginTop: 6 }}>
-                    🗓 {new Date(event.starts_at).toLocaleString()}
-                    {event.ends_at ? ` — ${new Date(event.ends_at).toLocaleString()}` : ""}
+                    🗓 {formatDateTime(event.starts_at)}
+                    {event.ends_at ? ` — ${formatDateTime(event.ends_at)}` : ""}
                   </div>
                 )}
                 {event.location && <div style={{ marginTop: 6 }}>📍 {event.location}</div>}
@@ -1187,11 +1187,11 @@ export default function EventPage() {
                   <img src={coverImageUrl} alt={`${event.title} cover`} style={eventCoverStyle} />
                 </div>
               )}
-            </div>
+              </div>
 
-            {event.description && <p style={{ marginTop: 12, color: "rgba(229,231,235,0.85)" }}>{event.description}</p>}
-          </Card>
-        </div>
+              {event.description && <p style={{ marginTop: 12, color: "rgba(229,231,235,0.85)" }}>{event.description}</p>}
+            </Card>
+          </div>
 
         {isCreator && (
           <Card>
@@ -1544,7 +1544,7 @@ export default function EventPage() {
                   <div key={m.id} style={{ marginBottom: 10 }}>
                     <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
                       <b>{displayNameByUser(m.sender_id, m.full_name, m.email)}</b> •{" "}
-                      {new Date(m.created_at).toLocaleString()}
+                      {formatDateTime(m.created_at)}
                     </div>
                     <div style={{ marginTop: 3 }}>{m.body}</div>
                   </div>
@@ -1566,6 +1566,7 @@ export default function EventPage() {
             {chatStatus && <div style={statusBoxStyle(chatStatus.startsWith("✅"))}>{chatStatus}</div>}
           </div>
         </Card>
+        </div>
       </div>
     </div>
   );
@@ -1646,7 +1647,6 @@ function Card({ children }: { children: React.ReactNode }) {
         background: "rgba(255,255,255,0.06)",
         border: "1px solid rgba(255,255,255,0.10)",
         boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
-        marginTop: 16,
       }}
     >
       {children}
@@ -1734,6 +1734,12 @@ const twoColumnLayout: React.CSSProperties = {
   gap: 16,
   gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
   alignItems: "start",
+};
+
+const mainSectionStackStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 16,
+  marginTop: 16,
 };
 
 // Vertical stack used inside each main grid column.

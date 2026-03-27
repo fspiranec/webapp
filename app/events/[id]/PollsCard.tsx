@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { formatDateTime } from "@/lib/dateTime";
 import type { PollOptionRow, PollRow, PollVoteRow } from "./event-types";
 
 type ProfileRow = {
@@ -224,7 +225,7 @@ export default function PollsCard(props: {
 
   return (
     <div style={card}>
-      <h2>{title}</h2>
+      <h2 style={{ margin: "0 0 10px" }}>{title}</h2>
 
       {canCreatePoll && (
         <div style={{ ...pollBox, marginBottom: 12 }}>
@@ -273,7 +274,7 @@ export default function PollsCard(props: {
                   <div style={{ fontWeight: 900 }}>{p.question}</div>
                   <div style={{ fontSize: 13, opacity: 0.8, marginTop: 4 }}>
                     {votedPeopleCount}/{eventMemberCount} people voted
-                    {closed ? ` • Closed ${new Date(p.closed_at!).toLocaleString()}` : " • Open"}
+                    {closed ? ` • Closed ${formatDateTime(p.closed_at)}` : " • Open"}
                   </div>
                   <div style={{ fontSize: 12, opacity: 0.68, marginTop: 4 }}>
                     {canManage ? "You can manage this poll." : "Only the poll creator or event creator can manage this poll."}

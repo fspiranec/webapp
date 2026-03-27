@@ -225,6 +225,7 @@ export default function NewEventPage() {
             <Field label="Date & time">
               <input
                 type="datetime-local"
+                lang="en-GB"
                 value={startsAt}
                 onChange={(e) => setStartsAt(e.target.value)}
                 style={inputStyle}
@@ -234,6 +235,7 @@ export default function NewEventPage() {
             <Field label="End time">
               <input
                 type="datetime-local"
+                lang="en-GB"
                 value={endsAt}
                 onChange={(e) => setEndsAt(e.target.value)}
                 style={inputStyle}

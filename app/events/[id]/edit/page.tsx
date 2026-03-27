@@ -280,11 +280,11 @@ export default function EditEventPage() {
             </Field>
 
             <Field label="Date & time">
-              <input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} style={inputStyle} />
+              <input type="datetime-local" lang="en-GB" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} style={inputStyle} />
             </Field>
 
             <Field label="End time">
-              <input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} style={inputStyle} />
+              <input type="datetime-local" lang="en-GB" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} style={inputStyle} />
             </Field>
 
             <Field label="Location">

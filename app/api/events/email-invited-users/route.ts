@@ -14,6 +14,11 @@ type EmailInvitedUsersRequest = {
   message?: string;
 };
 
+const MAX_RECIPIENTS_PER_REQUEST = 100;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_REQUESTS = 5;
+const senderRateMap = new Map<string, number[]>();
+
 function escapeHtml(value: string) {
   return value
     .replaceAll("&", "&amp;")
@@ -29,6 +34,24 @@ function formatDateRange(startsAt?: string | null, endsAt?: string | null) {
   const start = new Date(startsAt).toLocaleString();
   if (!endsAt) return `Time: ${start}`;
   return `Time: ${start} - ${new Date(endsAt).toLocaleString()}`;
+}
+
+function canSendFromKey(rateKey: string) {
+  const now = Date.now();
+  const recent = (senderRateMap.get(rateKey) ?? []).filter((ts) => now - ts < RATE_LIMIT_WINDOW_MS);
+  if (recent.length >= RATE_LIMIT_MAX_REQUESTS) return false;
+  recent.push(now);
+  senderRateMap.set(rateKey, recent);
+  return true;
+}
+
+function isSafeAbsoluteUrl(value: string) {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
 export async function POST(req: Request) {
@@ -50,11 +73,29 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
   }
 
-  const recipientEmails = Array.from(new Set((body.recipientEmails ?? []).map((email) => email.trim().toLowerCase()).filter(Boolean)));
+  const recipientEmails = Array.from(
+    new Set((body.recipientEmails ?? []).map((email) => email.trim().toLowerCase()).filter(Boolean))
+  );
   if (!body.eventId || !body.eventTitle || !body.inviteLink || recipientEmails.length === 0) {
     return NextResponse.json(
       { error: "eventId, eventTitle, inviteLink, and at least one recipient email are required" },
       { status: 400 }
+    );
+  }
+  if (!isSafeAbsoluteUrl(body.inviteLink)) {
+    return NextResponse.json({ error: "inviteLink must be an absolute http(s) URL" }, { status: 400 });
+  }
+  if (recipientEmails.length > MAX_RECIPIENTS_PER_REQUEST) {
+    return NextResponse.json(
+      { error: `Too many recipients. Maximum allowed is ${MAX_RECIPIENTS_PER_REQUEST}.` },
+      { status: 400 }
+    );
+  }
+  const rateKey = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown-sender";
+  if (!canSendFromKey(rateKey)) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded. Please wait before sending more reminder emails." },
+      { status: 429 }
     );
   }
 

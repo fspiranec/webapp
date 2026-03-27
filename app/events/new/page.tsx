@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useIsMobile } from "@/lib/useIsMobile";
 
@@ -122,9 +123,9 @@ export default function NewEventPage() {
           color: "#e5e7eb",
         }}
       >
-        <a href="/events" style={{ color: "#93c5fd", textDecoration: "none" }}>
+        <Link href="/events" style={{ color: "#93c5fd", textDecoration: "none" }}>
           ← Back to events
-        </a>
+        </Link>
 
         <div
           style={{

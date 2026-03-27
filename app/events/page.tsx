@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useIsMobile } from "@/lib/useIsMobile";
 
@@ -92,7 +93,12 @@ export default function EventsPage() {
       <div style={{ ...page, padding: isMobile ? 16 : 24 }}>
         <Shell isMobile={isMobile}>
           <Card>
-            <div style={{ color: "rgba(229,231,235,0.8)" }}>Loading…</div>
+            <div style={{ display: "grid", gap: 10 }}>
+              <div style={skeletonTitle} />
+              <div style={skeletonRow} />
+              <div style={skeletonRow} />
+              <div style={skeletonRow} />
+            </div>
           </Card>
         </Shell>
       </div>
@@ -139,7 +145,7 @@ export default function EventsPage() {
               </div>
             ) : (
               events.map((e) => (
-                <a key={e.id} href={`/events/${e.id}`} style={eventRow}>
+                <Link key={e.id} href={`/events/${e.id}`} style={eventRow}>
                   <div style={{ fontWeight: 900, fontSize: 18 }}>{e.title}</div>
                   <div style={{ color: "rgba(229,231,235,0.75)", fontSize: 13, marginTop: 4 }}>
                     {e.type}
@@ -147,7 +153,7 @@ export default function EventsPage() {
                     {e.starts_at ? ` • ${new Date(e.starts_at).toLocaleString()}` : ""}
                     {e.location ? ` • ${e.location}` : ""}
                   </div>
-                </a>
+                </Link>
               ))
             )}
           </div>
@@ -229,6 +235,19 @@ const eventRow: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
   textDecoration: "none",
   color: "#e5e7eb",
+};
+
+const skeletonTitle: React.CSSProperties = {
+  height: 24,
+  borderRadius: 10,
+  background: "rgba(255,255,255,0.12)",
+  width: "45%",
+};
+
+const skeletonRow: React.CSSProperties = {
+  height: 58,
+  borderRadius: 14,
+  background: "rgba(255,255,255,0.08)",
 };
 
 function statusBox(ok: boolean): React.CSSProperties {

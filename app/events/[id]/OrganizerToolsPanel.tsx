@@ -30,6 +30,7 @@ type PollVoteRow = {
 
 type InviteRow = {
   id: string;
+  event_id?: string;
   email: string;
   accepted: boolean;
   created_at: string;
@@ -44,12 +45,20 @@ type FriendRow = {
 type MemberRow = {
   user_id: string;
   full_name: string | null;
+  email: string | null;
+  rsvp: "accepted" | "maybe" | "declined" | null;
 };
 
 type TaskRow = {
   id: string;
+  event_id: string;
   title: string;
   description: string | null;
+  assignee_id: string | null;
+  visibility: "public" | "secret";
+  status: "todo" | "in_progress" | "done";
+  created_by: string;
+  created_at: string;
 };
 
 type OrganizerTab = "polls" | "event" | "invite" | "tasks";

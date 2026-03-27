@@ -88,7 +88,7 @@ export default function EventPage() {
   // Chat
   const [chatTab, setChatTab] = useState<"general" | "secret">("general");
   const [organizerTab, setOrganizerTab] = useState<OrganizerTab>("polls");
-  const [organizerToolsExpanded, setOrganizerToolsExpanded] = useState(true);
+  const [organizerToolsExpanded, setOrganizerToolsExpanded] = useState(false);
   const [messages, setMessages] = useState<MsgRow[]>([]);
   const [msgText, setMsgText] = useState("");
   const [chatStatus, setChatStatus] = useState("");
@@ -1646,7 +1646,7 @@ function Card({ children }: { children: React.ReactNode }) {
         background: "rgba(255,255,255,0.06)",
         border: "1px solid rgba(255,255,255,0.10)",
         boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
-        marginTop: 14,
+        marginTop: 16,
       }}
     >
       {children}
@@ -1739,7 +1739,7 @@ const twoColumnLayout: React.CSSProperties = {
 // Vertical stack used inside each main grid column.
 const columnStack: React.CSSProperties = {
   display: "grid",
-  gap: 14,
+  gap: 16,
 };
 
 const peopleListStyle: React.CSSProperties = {

@@ -1,4 +1,6 @@
 -- Expand join link event context so the UI can show start time, location, and host name.
+drop function if exists public.get_join_event_details(uuid);
+
 create or replace function public.get_join_event_details(eid uuid)
 returns table (
   id uuid,
@@ -57,4 +59,3 @@ for update
 to authenticated
 using (user_id = auth.uid())
 with check (user_id = auth.uid());
-

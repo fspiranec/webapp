@@ -1573,48 +1573,6 @@ export default function EventPage() {
               onToggleExpanded={() => setPeopleExpanded((v) => !v)}
             />
 
-            <ExpensesPanel
-              expanded={expensesExpanded}
-              onToggleExpanded={() => setExpensesExpanded((v) => !v)}
-              event={event}
-              meId={me?.id ?? null}
-              isCreator={!!isCreator}
-              members={members}
-              expenses={expenses}
-              participantsByExpense={expenseParticipantsByExpense}
-              settlement={expenseSettlement.transfers}
-              balances={expenseSettlement.balances}
-              expenseName={expenseName}
-              setExpenseName={setExpenseName}
-              expenseAmount={expenseAmount}
-              setExpenseAmount={setExpenseAmount}
-              expenseNote={expenseNote}
-              setExpenseNote={setExpenseNote}
-              expenseShareAll={expenseShareAll}
-              setExpenseShareAll={setExpenseShareAll}
-              selectedParticipantIds={selectedExpenseParticipantIds}
-              setSelectedParticipantIds={setSelectedExpenseParticipantIds}
-              participantOptions={expenseParticipantOptions}
-              displayNameByUser={displayNameByUser}
-              addExpense={addExpense}
-              toggleExpensesClosed={toggleExpensesClosed}
-              editExpenseId={editExpenseId}
-              editExpenseName={editExpenseName}
-              setEditExpenseName={setEditExpenseName}
-              editExpenseAmount={editExpenseAmount}
-              setEditExpenseAmount={setEditExpenseAmount}
-              editExpenseNote={editExpenseNote}
-              setEditExpenseNote={setEditExpenseNote}
-              editExpenseShareAll={editExpenseShareAll}
-              setEditExpenseShareAll={setEditExpenseShareAll}
-              editExpenseParticipantIds={editExpenseParticipantIds}
-              setEditExpenseParticipantIds={setEditExpenseParticipantIds}
-              startExpenseEdit={startExpenseEdit}
-              cancelExpenseEdit={cancelExpenseEdit}
-              saveExpenseEdit={saveExpenseEdit}
-              deleteExpense={deleteExpense}
-              status={expensesStatus}
-            />
           </div>
 
           {/* Collaboration tools column: polls for decisions + tasks for execution planning. */}
@@ -1837,6 +1795,49 @@ export default function EventPage() {
             </div>
           )}
         </Card>
+
+        <ExpensesPanel
+          expanded={expensesExpanded}
+          onToggleExpanded={() => setExpensesExpanded((v) => !v)}
+          event={event}
+          meId={me?.id ?? null}
+          isCreator={!!isCreator}
+          members={members}
+          expenses={expenses}
+          participantsByExpense={expenseParticipantsByExpense}
+          settlement={expenseSettlement.transfers}
+          balances={expenseSettlement.balances}
+          expenseName={expenseName}
+          setExpenseName={setExpenseName}
+          expenseAmount={expenseAmount}
+          setExpenseAmount={setExpenseAmount}
+          expenseNote={expenseNote}
+          setExpenseNote={setExpenseNote}
+          expenseShareAll={expenseShareAll}
+          setExpenseShareAll={setExpenseShareAll}
+          selectedParticipantIds={selectedExpenseParticipantIds}
+          setSelectedParticipantIds={setSelectedExpenseParticipantIds}
+          participantOptions={expenseParticipantOptions}
+          displayNameByUser={displayNameByUser}
+          addExpense={addExpense}
+          toggleExpensesClosed={toggleExpensesClosed}
+          editExpenseId={editExpenseId}
+          editExpenseName={editExpenseName}
+          setEditExpenseName={setEditExpenseName}
+          editExpenseAmount={editExpenseAmount}
+          setEditExpenseAmount={setEditExpenseAmount}
+          editExpenseNote={editExpenseNote}
+          setEditExpenseNote={setEditExpenseNote}
+          editExpenseShareAll={editExpenseShareAll}
+          setEditExpenseShareAll={setEditExpenseShareAll}
+          editExpenseParticipantIds={editExpenseParticipantIds}
+          setEditExpenseParticipantIds={setEditExpenseParticipantIds}
+          startExpenseEdit={startExpenseEdit}
+          cancelExpenseEdit={cancelExpenseEdit}
+          saveExpenseEdit={saveExpenseEdit}
+          deleteExpense={deleteExpense}
+          status={expensesStatus}
+        />
 
         {/* Chat panel: channelized discussion (general + optional birthday secret channel). */}
         {/* Rendering keeps message history above composer so latest context is always visible. */}

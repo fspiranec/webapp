@@ -9,6 +9,7 @@ import { gradientPageBackground, spacing } from "@/lib/uiStyles";
 import { useIsMobile } from "@/lib/useIsMobile";
 
 type EventType = "grill" | "birthday" | "other";
+type ExpensePolicy = "host_covers_all" | "shared";
 type TemplateKey = "blank" | "birthday-surprise" | "grill-weekend" | "team-hangout";
 
 const EVENT_TEMPLATES: Record<
@@ -47,6 +48,7 @@ export default function NewEventPage() {
   const [endsAt, setEndsAt] = useState("");
   const [location, setLocation] = useState("");
   const [description, setDescription] = useState("");
+  const [expensePolicy, setExpensePolicy] = useState<ExpensePolicy>("shared");
   const [status, setStatus] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -129,7 +131,7 @@ export default function NewEventPage() {
       const surprise_mode = type === "birthday";
 
       // ✅ Insert event
-          const { data: event, error: eventErr } = await supabase
+      const { data: event, error: eventErr } = await supabase
         .from("events")
         .insert({
           creator_id: userId,
@@ -140,6 +142,7 @@ export default function NewEventPage() {
           starts_at: startsAt ? new Date(startsAt).toISOString() : null,
           ends_at: endsAt ? new Date(endsAt).toISOString() : null,
           surprise_mode,
+          expense_policy: expensePolicy,
         })
         .select("id")
         .single();
@@ -258,6 +261,17 @@ export default function NewEventPage() {
                 placeholder="Any notes for people..."
                 style={{ ...inputStyle, minHeight: 110, resize: "vertical" as const }}
               />
+            </Field>
+
+            <Field label="Expenses">
+              <select
+                value={expensePolicy}
+                onChange={(e) => setExpensePolicy(e.target.value as ExpensePolicy)}
+                style={inputStyle}
+              >
+                <option value="shared">Expenses will be shared</option>
+                <option value="host_covers_all">Host covers all expenses</option>
+              </select>
             </Field>
 
             <Button

@@ -11,6 +11,8 @@ import PollsCard from "./PollsCard";
 import type {
   ClaimRow,
   EventRow,
+  ExpenseParticipantRow,
+  ExpenseRow,
   FriendRow,
   InviteRow,
   ItemRow,
@@ -47,6 +49,8 @@ export default function EventPage() {
   const [friends, setFriends] = useState<FriendRow[]>([]);
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [tasks, setTasks] = useState<TaskRow[]>([]);
+  const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
+  const [expenseParticipants, setExpenseParticipants] = useState<ExpenseParticipantRow[]>([]);
 
   // Polls
   const [polls, setPolls] = useState<PollRow[]>([]);
@@ -55,6 +59,7 @@ export default function EventPage() {
 
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("");
+  const [expensesStatus, setExpensesStatus] = useState("");
 
   // Items
   const [newItemTitle, setNewItemTitle] = useState("");
@@ -107,6 +112,19 @@ export default function EventPage() {
   const [editTaskAssigneeId, setEditTaskAssigneeId] = useState("");
   const [editTaskVisibility, setEditTaskVisibility] = useState<"public" | "secret">("public");
   const [editTaskStatus, setEditTaskStatus] = useState<"todo" | "in_progress" | "done">("todo");
+  const [expensesExpanded, setExpensesExpanded] = useState(false);
+  const [peopleExpanded, setPeopleExpanded] = useState(false);
+  const [expenseName, setExpenseName] = useState("");
+  const [expenseAmount, setExpenseAmount] = useState("");
+  const [expenseNote, setExpenseNote] = useState("");
+  const [expenseShareAll, setExpenseShareAll] = useState(true);
+  const [selectedExpenseParticipantIds, setSelectedExpenseParticipantIds] = useState<Record<string, boolean>>({});
+  const [editExpenseId, setEditExpenseId] = useState<string | null>(null);
+  const [editExpenseName, setEditExpenseName] = useState("");
+  const [editExpenseAmount, setEditExpenseAmount] = useState("");
+  const [editExpenseNote, setEditExpenseNote] = useState("");
+  const [editExpenseShareAll, setEditExpenseShareAll] = useState(true);
+  const [editExpenseParticipantIds, setEditExpenseParticipantIds] = useState<Record<string, boolean>>({});
 
   /* ================= HELPERS ================= */
 
@@ -193,6 +211,77 @@ export default function EventPage() {
     return rows.sort((a, b) => a.label.localeCompare(b.label));
   }, [members, event?.creator_id, me?.id]);
 
+  const confirmedMembers = useMemo(() => {
+    return members.filter((m) => !m.rsvp || m.rsvp === "accepted");
+  }, [members]);
+
+  const expenseParticipantOptions = useMemo(() => {
+    return confirmedMembers
+      .map((m) => ({
+        user_id: m.user_id,
+        label: displayNameByUser(m.user_id, m.full_name, m.email),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [confirmedMembers]);
+
+  const expenseParticipantsByExpense = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const p of expenseParticipants) {
+      const rows = map.get(p.expense_id) ?? [];
+      rows.push(p.user_id);
+      map.set(p.expense_id, rows);
+    }
+    return map;
+  }, [expenseParticipants]);
+
+  const expenseSettlement = useMemo(() => {
+    const netByUser = new Map<string, number>();
+    for (const member of confirmedMembers) netByUser.set(member.user_id, 0);
+
+    for (const exp of expenses) {
+      const participants = exp.shared_with_all
+        ? confirmedMembers.map((m) => m.user_id)
+        : expenseParticipantsByExpense.get(exp.id) ?? [];
+      if (participants.length === 0) continue;
+      const amount = Number(exp.amount);
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+
+      const share = amount / participants.length;
+      netByUser.set(exp.created_by, (netByUser.get(exp.created_by) ?? 0) + amount);
+      for (const uid of participants) {
+        netByUser.set(uid, (netByUser.get(uid) ?? 0) - share);
+      }
+    }
+
+    const creditors = Array.from(netByUser.entries())
+      .filter(([, net]) => net > 0.009)
+      .map(([user_id, amount]) => ({ user_id, amount }));
+    const debtors = Array.from(netByUser.entries())
+      .filter(([, net]) => net < -0.009)
+      .map(([user_id, amount]) => ({ user_id, amount: Math.abs(amount) }));
+
+    const transfers: Array<{ from: string; to: string; amount: number }> = [];
+    let i = 0;
+    let j = 0;
+    while (i < debtors.length && j < creditors.length) {
+      const debtor = debtors[i];
+      const creditor = creditors[j];
+      const settled = Math.min(debtor.amount, creditor.amount);
+      if (settled > 0.009) {
+        transfers.push({ from: debtor.user_id, to: creditor.user_id, amount: settled });
+      }
+      debtor.amount -= settled;
+      creditor.amount -= settled;
+      if (debtor.amount <= 0.009) i += 1;
+      if (creditor.amount <= 0.009) j += 1;
+    }
+
+    return {
+      balances: Array.from(netByUser.entries()).map(([user_id, net]) => ({ user_id, net })),
+      transfers,
+    };
+  }, [confirmedMembers, expenses, expenseParticipantsByExpense]);
+
   // Resets bulk selection after a successful invite operation.
   function clearSelected() {
     setSelectedFriendIds({});
@@ -223,6 +312,7 @@ export default function EventPage() {
     setRsvpStatus("");
     setChatStatus("");
     setTaskStatusMsg("");
+    setExpensesStatus("");
 
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
@@ -354,6 +444,34 @@ export default function EventPage() {
         };
       })
     );
+
+    const exp = await supabase
+      .from("event_expenses")
+      .select("id,event_id,created_by,title,amount,note,shared_with_all,created_at")
+      .eq("event_id", eventId)
+      .order("created_at", { ascending: true });
+    if (exp.error) {
+      setExpenses([]);
+      setExpensesStatus(`❌ ${exp.error.message}`);
+    } else {
+      setExpenses((exp.data ?? []) as ExpenseRow[]);
+    }
+
+    const expIds = (exp.data ?? []).map((row: any) => row.id);
+    if (expIds.length > 0) {
+      const expParticipants = await supabase
+        .from("event_expense_participants")
+        .select("expense_id,user_id")
+        .in("expense_id", expIds);
+      if (expParticipants.error) {
+        setExpenseParticipants([]);
+        setExpensesStatus(`❌ ${expParticipants.error.message}`);
+      } else {
+        setExpenseParticipants((expParticipants.data ?? []) as ExpenseParticipantRow[]);
+      }
+    } else {
+      setExpenseParticipants([]);
+    }
 
     // ===== POLLS (inside loadAll) =====
     const p = await supabase
@@ -866,6 +984,222 @@ export default function EventPage() {
     await loadAll({ background: true });
   }
 
+  async function addExpense() {
+    if (!me || !event) return;
+    if (event.expenses_closed_at) {
+      setExpensesStatus("❌ Expenses are closed. Ask host to reopen.");
+      return;
+    }
+
+    const name = expenseName.trim();
+    const amount = Number(expenseAmount);
+    if (!name) {
+      setExpensesStatus("❌ Expense name is required");
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setExpensesStatus("❌ Amount must be greater than 0");
+      return;
+    }
+
+    const selectedIds = expenseShareAll
+      ? confirmedMembers.map((m) => m.user_id)
+      : Object.keys(selectedExpenseParticipantIds).filter((id) => selectedExpenseParticipantIds[id]);
+    if (selectedIds.length === 0) {
+      setExpensesStatus("❌ Select at least one attendee to share with");
+      return;
+    }
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    setExpensesStatus("Saving expense…");
+    const created = await supabase
+      .from("event_expenses")
+      .insert({
+        event_id: eventId,
+        created_by: me.id,
+        title: name,
+        amount,
+        note: expenseNote.trim() ? expenseNote.trim() : null,
+        shared_with_all: expenseShareAll,
+      })
+      .select("id")
+      .single();
+    if (created.error) {
+      setExpensesStatus(`❌ ${created.error.message}`);
+      return;
+    }
+
+    if (!expenseShareAll) {
+      const participantsInsert = await supabase.from("event_expense_participants").insert(
+        selectedIds.map((uid) => ({
+          expense_id: created.data.id,
+          user_id: uid,
+        }))
+      );
+      if (participantsInsert.error) {
+        setExpensesStatus(`❌ ${participantsInsert.error.message}`);
+        return;
+      }
+    }
+
+    setExpenseName("");
+    setExpenseAmount("");
+    setExpenseNote("");
+    setExpenseShareAll(true);
+    setSelectedExpenseParticipantIds({});
+    setExpensesStatus("✅ Expense added");
+    await loadAll({ background: true });
+  }
+
+  async function toggleExpensesClosed(nextClosed: boolean) {
+    if (!isCreator || !event) return;
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    setExpensesStatus(nextClosed ? "Closing expenses…" : "Reopening expenses…");
+    const res = await supabase
+      .from("events")
+      .update({ expenses_closed_at: nextClosed ? new Date().toISOString() : null })
+      .eq("id", eventId);
+    if (res.error) {
+      setExpensesStatus(`❌ ${res.error.message}`);
+      return;
+    }
+    setExpensesStatus(nextClosed ? "✅ Expenses closed and settlement ready." : "✅ Expenses reopened.");
+    await loadAll({ background: true });
+  }
+
+  async function updateExpensePolicy(nextPolicy: "host_covers_all" | "shared") {
+    if (!isCreator || !event) return;
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    setExpensesStatus("Updating expense mode…");
+    const res = await supabase
+      .from("events")
+      .update({
+        expense_policy: nextPolicy,
+        expenses_closed_at: nextPolicy === "host_covers_all" ? null : event.expenses_closed_at,
+      })
+      .eq("id", eventId);
+    if (res.error) {
+      setExpensesStatus(`❌ ${res.error.message}`);
+      return;
+    }
+    setExpensesStatus("✅ Expense mode updated");
+    await loadAll({ background: true });
+  }
+
+  function startExpenseEdit(expense: ExpenseRow) {
+    setEditExpenseId(expense.id);
+    setEditExpenseName(expense.title);
+    setEditExpenseAmount(String(Number(expense.amount)));
+    setEditExpenseNote(expense.note ?? "");
+    setEditExpenseShareAll(expense.shared_with_all);
+    const selected = (expenseParticipantsByExpense.get(expense.id) ?? []).reduce<Record<string, boolean>>((acc, uid) => {
+      acc[uid] = true;
+      return acc;
+    }, {});
+    setEditExpenseParticipantIds(selected);
+    setExpensesStatus("");
+  }
+
+  function cancelExpenseEdit() {
+    setEditExpenseId(null);
+    setEditExpenseName("");
+    setEditExpenseAmount("");
+    setEditExpenseNote("");
+    setEditExpenseShareAll(true);
+    setEditExpenseParticipantIds({});
+  }
+
+  async function saveExpenseEdit() {
+    if (!editExpenseId || !me || !event) return;
+    if (event.expenses_closed_at) {
+      setExpensesStatus("❌ Reopen expenses first to edit.");
+      return;
+    }
+    const name = editExpenseName.trim();
+    const amount = Number(editExpenseAmount);
+    if (!name) {
+      setExpensesStatus("❌ Expense name is required");
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setExpensesStatus("❌ Amount must be greater than 0");
+      return;
+    }
+    const selectedIds = editExpenseShareAll
+      ? confirmedMembers.map((m) => m.user_id)
+      : Object.keys(editExpenseParticipantIds).filter((id) => editExpenseParticipantIds[id]);
+    if (!editExpenseShareAll && selectedIds.length === 0) {
+      setExpensesStatus("❌ Select at least one attendee to share with");
+      return;
+    }
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    setExpensesStatus("Updating expense…");
+    const updateRes = await supabase
+      .from("event_expenses")
+      .update({
+        title: name,
+        amount,
+        note: editExpenseNote.trim() ? editExpenseNote.trim() : null,
+        shared_with_all: editExpenseShareAll,
+      })
+      .eq("id", editExpenseId);
+    if (updateRes.error) {
+      setExpensesStatus(`❌ ${updateRes.error.message}`);
+      return;
+    }
+
+    const clearParticipants = await supabase.from("event_expense_participants").delete().eq("expense_id", editExpenseId);
+    if (clearParticipants.error) {
+      setExpensesStatus(`❌ ${clearParticipants.error.message}`);
+      return;
+    }
+
+    if (!editExpenseShareAll) {
+      const insertParticipants = await supabase.from("event_expense_participants").insert(
+        selectedIds.map((uid) => ({
+          expense_id: editExpenseId,
+          user_id: uid,
+        }))
+      );
+      if (insertParticipants.error) {
+        setExpensesStatus(`❌ ${insertParticipants.error.message}`);
+        return;
+      }
+    }
+
+    setExpensesStatus("✅ Expense updated");
+    cancelExpenseEdit();
+    await loadAll({ background: true });
+  }
+
+  async function deleteExpense(expenseId: string) {
+    if (!event) return;
+    if (event.expenses_closed_at) {
+      setExpensesStatus("❌ Reopen expenses first to delete.");
+      return;
+    }
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+    setExpensesStatus("Deleting expense…");
+    const res = await supabase.from("event_expenses").delete().eq("id", expenseId);
+    if (res.error) {
+      setExpensesStatus(`❌ ${res.error.message}`);
+      return;
+    }
+    if (editExpenseId === expenseId) cancelExpenseEdit();
+    setExpensesStatus("✅ Expense deleted");
+    await loadAll({ background: true });
+  }
+
   /* ================= DELETE EVENT (creator + password required) ================= */
 
   // Extra safety for destructive delete: re-auth with password before removing the event.
@@ -1256,7 +1590,10 @@ export default function EventPage() {
               myRsvp={myMember?.rsvp ?? "accepted"}
               onRsvpChange={updateMyRsvp}
               rsvpStatus={rsvpStatus}
+              expanded={peopleExpanded}
+              onToggleExpanded={() => setPeopleExpanded((v) => !v)}
             />
+
           </div>
 
           {/* Collaboration tools column: polls for decisions + tasks for execution planning. */}
@@ -1480,6 +1817,50 @@ export default function EventPage() {
           )}
         </Card>
 
+        <ExpensesPanel
+          expanded={expensesExpanded}
+          onToggleExpanded={() => setExpensesExpanded((v) => !v)}
+          event={event}
+          meId={me?.id ?? null}
+          isCreator={!!isCreator}
+          members={members}
+          expenses={expenses}
+          participantsByExpense={expenseParticipantsByExpense}
+          settlement={expenseSettlement.transfers}
+          balances={expenseSettlement.balances}
+          expenseName={expenseName}
+          setExpenseName={setExpenseName}
+          expenseAmount={expenseAmount}
+          setExpenseAmount={setExpenseAmount}
+          expenseNote={expenseNote}
+          setExpenseNote={setExpenseNote}
+          expenseShareAll={expenseShareAll}
+          setExpenseShareAll={setExpenseShareAll}
+          selectedParticipantIds={selectedExpenseParticipantIds}
+          setSelectedParticipantIds={setSelectedExpenseParticipantIds}
+          participantOptions={expenseParticipantOptions}
+          displayNameByUser={displayNameByUser}
+          addExpense={addExpense}
+          toggleExpensesClosed={toggleExpensesClosed}
+          updateExpensePolicy={updateExpensePolicy}
+          editExpenseId={editExpenseId}
+          editExpenseName={editExpenseName}
+          setEditExpenseName={setEditExpenseName}
+          editExpenseAmount={editExpenseAmount}
+          setEditExpenseAmount={setEditExpenseAmount}
+          editExpenseNote={editExpenseNote}
+          setEditExpenseNote={setEditExpenseNote}
+          editExpenseShareAll={editExpenseShareAll}
+          setEditExpenseShareAll={setEditExpenseShareAll}
+          editExpenseParticipantIds={editExpenseParticipantIds}
+          setEditExpenseParticipantIds={setEditExpenseParticipantIds}
+          startExpenseEdit={startExpenseEdit}
+          cancelExpenseEdit={cancelExpenseEdit}
+          saveExpenseEdit={saveExpenseEdit}
+          deleteExpense={deleteExpense}
+          status={expensesStatus}
+        />
+
         {/* Chat panel: channelized discussion (general + optional birthday secret channel). */}
         {/* Rendering keeps message history above composer so latest context is always visible. */}
         <Card>
@@ -1545,6 +1926,8 @@ function PeoplePanel({
   myRsvp,
   onRsvpChange,
   rsvpStatus,
+  expanded,
+  onToggleExpanded,
 }: {
   rows: Array<{ key: string; label: string; meta: string; status: "Confirmed" }>;
   isCreator: boolean;
@@ -1553,11 +1936,19 @@ function PeoplePanel({
   myRsvp: "accepted" | "maybe" | "declined" | null;
   onRsvpChange: (next: "accepted" | "maybe" | "declined") => void;
   rsvpStatus: string;
+  expanded: boolean;
+  onToggleExpanded: () => void;
 }) {
   return (
     <Card>
-      <h2 style={{ marginTop: 0 }}>People arriving ({rows.length})</h2>
-      <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <h2 style={{ marginTop: 0, marginBottom: 0 }}>People arriving ({rows.length})</h2>
+        <button onClick={onToggleExpanded} style={btnGhostSmall}>
+          {expanded ? "Minimize" : "Expand"}
+        </button>
+      </div>
+
+      {expanded && <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
         {rows.length === 0 ? (
           <div style={{ color: "rgba(229,231,235,0.75)" }}>No people yet.</div>
         ) : (
@@ -1595,7 +1986,336 @@ function PeoplePanel({
             {leaveStatus && <div style={statusBoxStyle(leaveStatus.startsWith("✅"))}>{leaveStatus}</div>}
           </div>
         )}
+      </div>}
+    </Card>
+  );
+}
+
+function ExpensesPanel({
+  expanded,
+  onToggleExpanded,
+  event,
+  meId,
+  isCreator,
+  members,
+  expenses,
+  participantsByExpense,
+  settlement,
+  balances,
+  expenseName,
+  setExpenseName,
+  expenseAmount,
+  setExpenseAmount,
+  expenseNote,
+  setExpenseNote,
+  expenseShareAll,
+  setExpenseShareAll,
+  selectedParticipantIds,
+  setSelectedParticipantIds,
+  participantOptions,
+  displayNameByUser,
+  addExpense,
+  toggleExpensesClosed,
+  updateExpensePolicy,
+  editExpenseId,
+  editExpenseName,
+  setEditExpenseName,
+  editExpenseAmount,
+  setEditExpenseAmount,
+  editExpenseNote,
+  setEditExpenseNote,
+  editExpenseShareAll,
+  setEditExpenseShareAll,
+  editExpenseParticipantIds,
+  setEditExpenseParticipantIds,
+  startExpenseEdit,
+  cancelExpenseEdit,
+  saveExpenseEdit,
+  deleteExpense,
+  status,
+}: {
+  expanded: boolean;
+  onToggleExpanded: () => void;
+  event: EventRow;
+  meId: string | null;
+  isCreator: boolean;
+  members: MemberRow[];
+  expenses: ExpenseRow[];
+  participantsByExpense: Map<string, string[]>;
+  settlement: Array<{ from: string; to: string; amount: number }>;
+  balances: Array<{ user_id: string; net: number }>;
+  expenseName: string;
+  setExpenseName: (value: string) => void;
+  expenseAmount: string;
+  setExpenseAmount: (value: string) => void;
+  expenseNote: string;
+  setExpenseNote: (value: string) => void;
+  expenseShareAll: boolean;
+  setExpenseShareAll: (value: boolean) => void;
+  selectedParticipantIds: Record<string, boolean>;
+  setSelectedParticipantIds: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  participantOptions: Array<{ user_id: string; label: string }>;
+  displayNameByUser: (userId: string, fullName: string | null, email?: string | null) => string;
+  addExpense: () => Promise<void>;
+  toggleExpensesClosed: (nextClosed: boolean) => Promise<void>;
+  updateExpensePolicy: (nextPolicy: "host_covers_all" | "shared") => Promise<void>;
+  editExpenseId: string | null;
+  editExpenseName: string;
+  setEditExpenseName: (value: string) => void;
+  editExpenseAmount: string;
+  setEditExpenseAmount: (value: string) => void;
+  editExpenseNote: string;
+  setEditExpenseNote: (value: string) => void;
+  editExpenseShareAll: boolean;
+  setEditExpenseShareAll: (value: boolean) => void;
+  editExpenseParticipantIds: Record<string, boolean>;
+  setEditExpenseParticipantIds: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  startExpenseEdit: (expense: ExpenseRow) => void;
+  cancelExpenseEdit: () => void;
+  saveExpenseEdit: () => Promise<void>;
+  deleteExpense: (expenseId: string) => Promise<void>;
+  status: string;
+}) {
+  const isClosed = !!event.expenses_closed_at;
+  const host = members.find((m) => m.user_id === event.creator_id);
+  const hostLabel = displayNameByUser(event.creator_id, host?.full_name ?? null, host?.email ?? null);
+  const isHostCoversAll = event.expense_policy === "host_covers_all";
+
+  return (
+    <Card>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <h2 style={{ marginTop: 0, marginBottom: 0 }}>Expenses</h2>
+        <button onClick={onToggleExpanded} style={btnGhostSmall}>
+          {expanded ? "Minimize" : "Expand"}
+        </button>
       </div>
+
+      {expanded && (
+        <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+          {isCreator && (
+            <div style={{ display: "grid", gap: 6 }}>
+              <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>Who covers expenses?</div>
+              <select
+                value={event.expense_policy}
+                onChange={(e) => updateExpensePolicy(e.target.value as "host_covers_all" | "shared")}
+                style={inputStyle}
+              >
+                <option value="shared">Expenses will be shared</option>
+                <option value="host_covers_all">Host covers all expenses</option>
+              </select>
+            </div>
+          )}
+
+          {isHostCoversAll ? (
+            <div style={statusBoxStyle(true)}>{`Host ${hostLabel} will cover all expenses. Enjoy.`}</div>
+          ) : (
+            <>
+              {!isClosed && (
+                <div style={{ display: "grid", gap: 8 }}>
+                  <input
+                    value={expenseName}
+                    onChange={(e) => setExpenseName(e.target.value)}
+                    placeholder="Expense name"
+                    style={inputStyle}
+                  />
+                  <input
+                    value={expenseAmount}
+                    onChange={(e) => setExpenseAmount(e.target.value)}
+                    placeholder="Amount (EUR)"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    style={inputStyle}
+                  />
+                  <input
+                    value={expenseNote}
+                    onChange={(e) => setExpenseNote(e.target.value)}
+                    placeholder="Note (optional)"
+                    style={inputStyle}
+                  />
+
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+                    <input
+                      type="checkbox"
+                      checked={expenseShareAll}
+                      onChange={(e) => setExpenseShareAll(e.target.checked)}
+                    />
+                    Share with whole group
+                  </label>
+
+                  {!expenseShareAll && (
+                    <div style={peopleListStyle}>
+                      {participantOptions.map((opt) => (
+                        <label key={opt.user_id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                          <input
+                            type="checkbox"
+                            checked={!!selectedParticipantIds[opt.user_id]}
+                            onChange={(e) =>
+                              setSelectedParticipantIds((prev) => ({ ...prev, [opt.user_id]: e.target.checked }))
+                            }
+                          />
+                          {opt.label}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+
+                  <button onClick={addExpense} style={btnPrimary}>
+                    Add expense
+                  </button>
+                </div>
+              )}
+
+              {isClosed && (
+                <div style={statusBoxStyle(true)}>
+                  Expense list is closed. Balances are calculated automatically.
+                </div>
+              )}
+            </>
+          )}
+
+          {isCreator && !isHostCoversAll && (
+            <button onClick={() => toggleExpensesClosed(!isClosed)} style={isClosed ? btnGhost : btnPrimary}>
+              {isClosed ? "Reopen expenses" : "Close expenses"}
+            </button>
+          )}
+
+          {status && <div style={statusBoxStyle(status.startsWith("✅"))}>{status}</div>}
+
+          {expenses.length > 0 && (
+            <div style={{ display: "grid", gap: 8 }}>
+              {expenses.map((exp) => {
+                const payer = members.find((m) => m.user_id === exp.created_by);
+                const payerName = displayNameByUser(exp.created_by, payer?.full_name ?? null, payer?.email ?? null);
+                const canManage = meId === exp.created_by || isCreator;
+                const isEditing = editExpenseId === exp.id;
+                const sharedWith = exp.shared_with_all
+                  ? "whole group"
+                  : (participantsByExpense.get(exp.id) ?? [])
+                      .map((uid) => {
+                        const person = members.find((m) => m.user_id === uid);
+                        return displayNameByUser(uid, person?.full_name ?? null, person?.email ?? null);
+                      })
+                      .join(", ");
+                return (
+                  <div key={exp.id} style={rowStyle}>
+                    <div style={{ flex: 1 }}>
+                      {isEditing ? (
+                        <div style={{ display: "grid", gap: 8 }}>
+                          <input value={editExpenseName} onChange={(e) => setEditExpenseName(e.target.value)} style={inputStyle} />
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={editExpenseAmount}
+                            onChange={(e) => setEditExpenseAmount(e.target.value)}
+                            style={inputStyle}
+                          />
+                          <input value={editExpenseNote} onChange={(e) => setEditExpenseNote(e.target.value)} style={inputStyle} />
+                          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+                            <input
+                              type="checkbox"
+                              checked={editExpenseShareAll}
+                              onChange={(e) => setEditExpenseShareAll(e.target.checked)}
+                            />
+                            Share with whole group
+                          </label>
+                          {!editExpenseShareAll && (
+                            <div style={peopleListStyle}>
+                              {participantOptions.map((opt) => (
+                                <label key={opt.user_id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={!!editExpenseParticipantIds[opt.user_id]}
+                                    onChange={(e) =>
+                                      setEditExpenseParticipantIds((prev) => ({ ...prev, [opt.user_id]: e.target.checked }))
+                                    }
+                                  />
+                                  {opt.label}
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ fontWeight: 700 }}>{exp.title}</div>
+                          <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
+                            {payerName} paid €{Number(exp.amount).toFixed(2)} • shared with {sharedWith || "nobody"}
+                          </div>
+                          {exp.note && <div style={{ marginTop: 4, fontSize: 13 }}>{exp.note}</div>}
+                        </>
+                      )}
+                    </div>
+                    <div style={{ ...itemActionRow, alignItems: "center" }}>
+                      {meId === exp.created_by && <span style={pillStyle("#60a5fa")}>You paid</span>}
+                      {canManage && !isClosed && (
+                        <>
+                          {isEditing ? (
+                            <>
+                              <button onClick={saveExpenseEdit} style={btnPrimary}>
+                                Save
+                              </button>
+                              <button onClick={cancelExpenseEdit} style={btnGhostSmall}>
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <button onClick={() => startExpenseEdit(exp)} style={btnGhostSmall}>
+                              Edit
+                            </button>
+                          )}
+                          <button onClick={() => deleteExpense(exp.id)} style={btnDangerSmall}>
+                            Delete
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {isClosed && !isHostCoversAll && (
+            <div style={{ display: "grid", gap: 8 }}>
+              <h3 style={{ margin: "4px 0" }}>Who owes whom</h3>
+              {settlement.length === 0 ? (
+                <div style={{ color: "rgba(229,231,235,0.75)" }}>Everyone is settled up.</div>
+              ) : (
+                settlement.map((t, idx) => {
+                  const from = members.find((m) => m.user_id === t.from);
+                  const to = members.find((m) => m.user_id === t.to);
+                  const fromName = displayNameByUser(t.from, from?.full_name ?? null, from?.email ?? null);
+                  const toName = displayNameByUser(t.to, to?.full_name ?? null, to?.email ?? null);
+                  return (
+                    <div key={`${t.from}-${t.to}-${idx}`} style={rowStyle}>
+                      {fromName} → {toName}: <b>€{t.amount.toFixed(2)}</b>
+                    </div>
+                  );
+                })
+              )}
+
+              <h3 style={{ margin: "6px 0 0" }}>Net balance</h3>
+              {balances
+                .slice()
+                .sort((a, b) => b.net - a.net)
+                .map((b) => {
+                  const p = members.find((m) => m.user_id === b.user_id);
+                  const label = displayNameByUser(b.user_id, p?.full_name ?? null, p?.email ?? null);
+                  return (
+                    <div key={b.user_id} style={rowStyle}>
+                      <span>{label}</span>
+                      <span style={{ color: b.net >= 0 ? "#86efac" : "#fca5a5" }}>
+                        {b.net >= 0 ? "+" : ""}€{b.net.toFixed(2)}
+                      </span>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </div>
+      )}
     </Card>
   );
 }

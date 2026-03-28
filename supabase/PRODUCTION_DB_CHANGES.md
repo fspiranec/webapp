@@ -144,3 +144,63 @@ Recommended Supabase-side monitoring:
 - Postgres slow query logs enabled.
 - Alert on failed auth in email API path.
 - Alert on spikes in `event_email_audit` writes per sender/event.
+
+---
+
+## 8) Expenses feature (new)
+
+### Why
+- Supports host-paid events and shared-expense balancing (Splitwise-style settlement) directly in event dashboards.
+
+### SQL changes
+```sql
+alter table public.events
+  add column if not exists expense_policy text not null default 'shared'
+    check (expense_policy in ('host_covers_all', 'shared')),
+  add column if not exists expenses_closed_at timestamptz;
+
+create table if not exists public.event_expenses (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid not null references public.events(id) on delete cascade,
+  created_by uuid not null references public.profiles(id) on delete cascade,
+  title text not null,
+  amount numeric(12,2) not null check (amount > 0),
+  note text,
+  shared_with_all boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.event_expense_participants (
+  expense_id uuid not null references public.event_expenses(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (expense_id, user_id)
+);
+
+create index if not exists event_expenses_event_created_idx
+  on public.event_expenses(event_id, created_at desc);
+
+create index if not exists event_expense_participants_expense_idx
+  on public.event_expense_participants(expense_id);
+```
+
+### RLS policy requirements
+1. `event_expenses`
+   - Members can read expenses for events they belong to.
+   - Members can insert only their own expenses (`created_by = auth.uid()`).
+   - Expense owner or event creator can update/delete.
+2. `event_expense_participants`
+   - Members can read rows linked to their event.
+   - Expense owner or event creator can insert/delete participants.
+
+### Rollout notes
+- Migrate existing events with default `expense_policy = 'shared'`.
+- Optional backfill for hosted events:
+```sql
+update public.events
+set expense_policy = 'host_covers_all'
+where creator_id in (
+  -- add host ids or selection logic here
+  select null::uuid where false
+);
+```

@@ -119,6 +119,12 @@ export default function EventPage() {
   const [expenseNote, setExpenseNote] = useState("");
   const [expenseShareAll, setExpenseShareAll] = useState(true);
   const [selectedExpenseParticipantIds, setSelectedExpenseParticipantIds] = useState<Record<string, boolean>>({});
+  const [editExpenseId, setEditExpenseId] = useState<string | null>(null);
+  const [editExpenseName, setEditExpenseName] = useState("");
+  const [editExpenseAmount, setEditExpenseAmount] = useState("");
+  const [editExpenseNote, setEditExpenseNote] = useState("");
+  const [editExpenseShareAll, setEditExpenseShareAll] = useState(true);
+  const [editExpenseParticipantIds, setEditExpenseParticipantIds] = useState<Record<string, boolean>>({});
 
   /* ================= HELPERS ================= */
 
@@ -1065,6 +1071,114 @@ export default function EventPage() {
     await loadAll({ background: true });
   }
 
+  function startExpenseEdit(expense: ExpenseRow) {
+    setEditExpenseId(expense.id);
+    setEditExpenseName(expense.title);
+    setEditExpenseAmount(String(Number(expense.amount)));
+    setEditExpenseNote(expense.note ?? "");
+    setEditExpenseShareAll(expense.shared_with_all);
+    const selected = (expenseParticipantsByExpense.get(expense.id) ?? []).reduce<Record<string, boolean>>((acc, uid) => {
+      acc[uid] = true;
+      return acc;
+    }, {});
+    setEditExpenseParticipantIds(selected);
+    setExpensesStatus("");
+  }
+
+  function cancelExpenseEdit() {
+    setEditExpenseId(null);
+    setEditExpenseName("");
+    setEditExpenseAmount("");
+    setEditExpenseNote("");
+    setEditExpenseShareAll(true);
+    setEditExpenseParticipantIds({});
+  }
+
+  async function saveExpenseEdit() {
+    if (!editExpenseId || !me || !event) return;
+    if (event.expenses_closed_at) {
+      setExpensesStatus("❌ Reopen expenses first to edit.");
+      return;
+    }
+    const name = editExpenseName.trim();
+    const amount = Number(editExpenseAmount);
+    if (!name) {
+      setExpensesStatus("❌ Expense name is required");
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setExpensesStatus("❌ Amount must be greater than 0");
+      return;
+    }
+    const selectedIds = editExpenseShareAll
+      ? confirmedMembers.map((m) => m.user_id)
+      : Object.keys(editExpenseParticipantIds).filter((id) => editExpenseParticipantIds[id]);
+    if (!editExpenseShareAll && selectedIds.length === 0) {
+      setExpensesStatus("❌ Select at least one attendee to share with");
+      return;
+    }
+
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    setExpensesStatus("Updating expense…");
+    const updateRes = await supabase
+      .from("event_expenses")
+      .update({
+        title: name,
+        amount,
+        note: editExpenseNote.trim() ? editExpenseNote.trim() : null,
+        shared_with_all: editExpenseShareAll,
+      })
+      .eq("id", editExpenseId);
+    if (updateRes.error) {
+      setExpensesStatus(`❌ ${updateRes.error.message}`);
+      return;
+    }
+
+    const clearParticipants = await supabase.from("event_expense_participants").delete().eq("expense_id", editExpenseId);
+    if (clearParticipants.error) {
+      setExpensesStatus(`❌ ${clearParticipants.error.message}`);
+      return;
+    }
+
+    if (!editExpenseShareAll) {
+      const insertParticipants = await supabase.from("event_expense_participants").insert(
+        selectedIds.map((uid) => ({
+          expense_id: editExpenseId,
+          user_id: uid,
+        }))
+      );
+      if (insertParticipants.error) {
+        setExpensesStatus(`❌ ${insertParticipants.error.message}`);
+        return;
+      }
+    }
+
+    setExpensesStatus("✅ Expense updated");
+    cancelExpenseEdit();
+    await loadAll({ background: true });
+  }
+
+  async function deleteExpense(expenseId: string) {
+    if (!event) return;
+    if (event.expenses_closed_at) {
+      setExpensesStatus("❌ Reopen expenses first to delete.");
+      return;
+    }
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+    setExpensesStatus("Deleting expense…");
+    const res = await supabase.from("event_expenses").delete().eq("id", expenseId);
+    if (res.error) {
+      setExpensesStatus(`❌ ${res.error.message}`);
+      return;
+    }
+    if (editExpenseId === expenseId) cancelExpenseEdit();
+    setExpensesStatus("✅ Expense deleted");
+    await loadAll({ background: true });
+  }
+
   /* ================= DELETE EVENT (creator + password required) ================= */
 
   // Extra safety for destructive delete: re-auth with password before removing the event.
@@ -1459,33 +1573,6 @@ export default function EventPage() {
               onToggleExpanded={() => setPeopleExpanded((v) => !v)}
             />
 
-            <ExpensesPanel
-              expanded={expensesExpanded}
-              onToggleExpanded={() => setExpensesExpanded((v) => !v)}
-              event={event}
-              meId={me?.id ?? null}
-              isCreator={!!isCreator}
-              members={members}
-              expenses={expenses}
-              participantsByExpense={expenseParticipantsByExpense}
-              settlement={expenseSettlement.transfers}
-              balances={expenseSettlement.balances}
-              expenseName={expenseName}
-              setExpenseName={setExpenseName}
-              expenseAmount={expenseAmount}
-              setExpenseAmount={setExpenseAmount}
-              expenseNote={expenseNote}
-              setExpenseNote={setExpenseNote}
-              expenseShareAll={expenseShareAll}
-              setExpenseShareAll={setExpenseShareAll}
-              selectedParticipantIds={selectedExpenseParticipantIds}
-              setSelectedParticipantIds={setSelectedExpenseParticipantIds}
-              participantOptions={expenseParticipantOptions}
-              displayNameByUser={displayNameByUser}
-              addExpense={addExpense}
-              toggleExpensesClosed={toggleExpensesClosed}
-              status={expensesStatus}
-            />
           </div>
 
           {/* Collaboration tools column: polls for decisions + tasks for execution planning. */}
@@ -1709,6 +1796,49 @@ export default function EventPage() {
           )}
         </Card>
 
+        <ExpensesPanel
+          expanded={expensesExpanded}
+          onToggleExpanded={() => setExpensesExpanded((v) => !v)}
+          event={event}
+          meId={me?.id ?? null}
+          isCreator={!!isCreator}
+          members={members}
+          expenses={expenses}
+          participantsByExpense={expenseParticipantsByExpense}
+          settlement={expenseSettlement.transfers}
+          balances={expenseSettlement.balances}
+          expenseName={expenseName}
+          setExpenseName={setExpenseName}
+          expenseAmount={expenseAmount}
+          setExpenseAmount={setExpenseAmount}
+          expenseNote={expenseNote}
+          setExpenseNote={setExpenseNote}
+          expenseShareAll={expenseShareAll}
+          setExpenseShareAll={setExpenseShareAll}
+          selectedParticipantIds={selectedExpenseParticipantIds}
+          setSelectedParticipantIds={setSelectedExpenseParticipantIds}
+          participantOptions={expenseParticipantOptions}
+          displayNameByUser={displayNameByUser}
+          addExpense={addExpense}
+          toggleExpensesClosed={toggleExpensesClosed}
+          editExpenseId={editExpenseId}
+          editExpenseName={editExpenseName}
+          setEditExpenseName={setEditExpenseName}
+          editExpenseAmount={editExpenseAmount}
+          setEditExpenseAmount={setEditExpenseAmount}
+          editExpenseNote={editExpenseNote}
+          setEditExpenseNote={setEditExpenseNote}
+          editExpenseShareAll={editExpenseShareAll}
+          setEditExpenseShareAll={setEditExpenseShareAll}
+          editExpenseParticipantIds={editExpenseParticipantIds}
+          setEditExpenseParticipantIds={setEditExpenseParticipantIds}
+          startExpenseEdit={startExpenseEdit}
+          cancelExpenseEdit={cancelExpenseEdit}
+          saveExpenseEdit={saveExpenseEdit}
+          deleteExpense={deleteExpense}
+          status={expensesStatus}
+        />
+
         {/* Chat panel: channelized discussion (general + optional birthday secret channel). */}
         {/* Rendering keeps message history above composer so latest context is always visible. */}
         <Card>
@@ -1864,6 +1994,21 @@ function ExpensesPanel({
   displayNameByUser,
   addExpense,
   toggleExpensesClosed,
+  editExpenseId,
+  editExpenseName,
+  setEditExpenseName,
+  editExpenseAmount,
+  setEditExpenseAmount,
+  editExpenseNote,
+  setEditExpenseNote,
+  editExpenseShareAll,
+  setEditExpenseShareAll,
+  editExpenseParticipantIds,
+  setEditExpenseParticipantIds,
+  startExpenseEdit,
+  cancelExpenseEdit,
+  saveExpenseEdit,
+  deleteExpense,
   status,
 }: {
   expanded: boolean;
@@ -1890,6 +2035,21 @@ function ExpensesPanel({
   displayNameByUser: (userId: string, fullName: string | null, email?: string | null) => string;
   addExpense: () => Promise<void>;
   toggleExpensesClosed: (nextClosed: boolean) => Promise<void>;
+  editExpenseId: string | null;
+  editExpenseName: string;
+  setEditExpenseName: (value: string) => void;
+  editExpenseAmount: string;
+  setEditExpenseAmount: (value: string) => void;
+  editExpenseNote: string;
+  setEditExpenseNote: (value: string) => void;
+  editExpenseShareAll: boolean;
+  setEditExpenseShareAll: (value: boolean) => void;
+  editExpenseParticipantIds: Record<string, boolean>;
+  setEditExpenseParticipantIds: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  startExpenseEdit: (expense: ExpenseRow) => void;
+  cancelExpenseEdit: () => void;
+  saveExpenseEdit: () => Promise<void>;
+  deleteExpense: (expenseId: string) => Promise<void>;
   status: string;
 }) {
   const isClosed = !!event.expenses_closed_at;
@@ -1989,6 +2149,8 @@ function ExpensesPanel({
               {expenses.map((exp) => {
                 const payer = members.find((m) => m.user_id === exp.created_by);
                 const payerName = displayNameByUser(exp.created_by, payer?.full_name ?? null, payer?.email ?? null);
+                const canManage = meId === exp.created_by || isCreator;
+                const isEditing = editExpenseId === exp.id;
                 const sharedWith = exp.shared_with_all
                   ? "whole group"
                   : (participantsByExpense.get(exp.id) ?? [])
@@ -2000,13 +2162,77 @@ function ExpensesPanel({
                 return (
                   <div key={exp.id} style={rowStyle}>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700 }}>{exp.title}</div>
-                      <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
-                        {payerName} paid €{Number(exp.amount).toFixed(2)} • shared with {sharedWith || "nobody"}
-                      </div>
-                      {exp.note && <div style={{ marginTop: 4, fontSize: 13 }}>{exp.note}</div>}
+                      {isEditing ? (
+                        <div style={{ display: "grid", gap: 8 }}>
+                          <input value={editExpenseName} onChange={(e) => setEditExpenseName(e.target.value)} style={inputStyle} />
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={editExpenseAmount}
+                            onChange={(e) => setEditExpenseAmount(e.target.value)}
+                            style={inputStyle}
+                          />
+                          <input value={editExpenseNote} onChange={(e) => setEditExpenseNote(e.target.value)} style={inputStyle} />
+                          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+                            <input
+                              type="checkbox"
+                              checked={editExpenseShareAll}
+                              onChange={(e) => setEditExpenseShareAll(e.target.checked)}
+                            />
+                            Share with whole group
+                          </label>
+                          {!editExpenseShareAll && (
+                            <div style={peopleListStyle}>
+                              {participantOptions.map((opt) => (
+                                <label key={opt.user_id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={!!editExpenseParticipantIds[opt.user_id]}
+                                    onChange={(e) =>
+                                      setEditExpenseParticipantIds((prev) => ({ ...prev, [opt.user_id]: e.target.checked }))
+                                    }
+                                  />
+                                  {opt.label}
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ fontWeight: 700 }}>{exp.title}</div>
+                          <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>
+                            {payerName} paid €{Number(exp.amount).toFixed(2)} • shared with {sharedWith || "nobody"}
+                          </div>
+                          {exp.note && <div style={{ marginTop: 4, fontSize: 13 }}>{exp.note}</div>}
+                        </>
+                      )}
                     </div>
-                    {meId === exp.created_by && <span style={pillStyle("#60a5fa")}>You paid</span>}
+                    <div style={{ ...itemActionRow, alignItems: "center" }}>
+                      {meId === exp.created_by && <span style={pillStyle("#60a5fa")}>You paid</span>}
+                      {canManage && !isClosed && (
+                        <>
+                          {isEditing ? (
+                            <>
+                              <button onClick={saveExpenseEdit} style={btnPrimary}>
+                                Save
+                              </button>
+                              <button onClick={cancelExpenseEdit} style={btnGhostSmall}>
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <button onClick={() => startExpenseEdit(exp)} style={btnGhostSmall}>
+                              Edit
+                            </button>
+                          )}
+                          <button onClick={() => deleteExpense(exp.id)} style={btnDangerSmall}>
+                            Delete
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 );
               })}

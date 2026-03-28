@@ -1071,6 +1071,27 @@ export default function EventPage() {
     await loadAll({ background: true });
   }
 
+  async function updateExpensePolicy(nextPolicy: "host_covers_all" | "shared") {
+    if (!isCreator || !event) return;
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    setExpensesStatus("Updating expense mode…");
+    const res = await supabase
+      .from("events")
+      .update({
+        expense_policy: nextPolicy,
+        expenses_closed_at: nextPolicy === "host_covers_all" ? null : event.expenses_closed_at,
+      })
+      .eq("id", eventId);
+    if (res.error) {
+      setExpensesStatus(`❌ ${res.error.message}`);
+      return;
+    }
+    setExpensesStatus("✅ Expense mode updated");
+    await loadAll({ background: true });
+  }
+
   function startExpenseEdit(expense: ExpenseRow) {
     setEditExpenseId(expense.id);
     setEditExpenseName(expense.title);
@@ -1821,6 +1842,7 @@ export default function EventPage() {
           displayNameByUser={displayNameByUser}
           addExpense={addExpense}
           toggleExpensesClosed={toggleExpensesClosed}
+          updateExpensePolicy={updateExpensePolicy}
           editExpenseId={editExpenseId}
           editExpenseName={editExpenseName}
           setEditExpenseName={setEditExpenseName}
@@ -1994,6 +2016,7 @@ function ExpensesPanel({
   displayNameByUser,
   addExpense,
   toggleExpensesClosed,
+  updateExpensePolicy,
   editExpenseId,
   editExpenseName,
   setEditExpenseName,
@@ -2035,6 +2058,7 @@ function ExpensesPanel({
   displayNameByUser: (userId: string, fullName: string | null, email?: string | null) => string;
   addExpense: () => Promise<void>;
   toggleExpensesClosed: (nextClosed: boolean) => Promise<void>;
+  updateExpensePolicy: (nextPolicy: "host_covers_all" | "shared") => Promise<void>;
   editExpenseId: string | null;
   editExpenseName: string;
   setEditExpenseName: (value: string) => void;
@@ -2068,8 +2092,22 @@ function ExpensesPanel({
 
       {expanded && (
         <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+          {isCreator && (
+            <div style={{ display: "grid", gap: 6 }}>
+              <div style={{ fontSize: 13, color: "rgba(229,231,235,0.75)" }}>Who covers expenses?</div>
+              <select
+                value={event.expense_policy}
+                onChange={(e) => updateExpensePolicy(e.target.value as "host_covers_all" | "shared")}
+                style={inputStyle}
+              >
+                <option value="shared">Expenses will be shared</option>
+                <option value="host_covers_all">Host covers all expenses</option>
+              </select>
+            </div>
+          )}
+
           {isHostCoversAll ? (
-            <div style={statusBoxStyle(true)}>{`Host ${hostLabel} is covering all expenses. Just come and enjoy.`}</div>
+            <div style={statusBoxStyle(true)}>{`Host ${hostLabel} will cover all expenses. Enjoy.`}</div>
           ) : (
             <>
               {!isClosed && (

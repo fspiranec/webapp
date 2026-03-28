@@ -34,6 +34,8 @@ export type EventRow = {
   description: string | null;
   surprise_mode: boolean;
   cover_image_path: string | null;
+  expense_policy: "host_covers_all" | "shared";
+  expenses_closed_at: string | null;
 };
 
 export type ItemRow = {
@@ -99,3 +101,19 @@ export type TaskRow = {
 };
 
 export type OrganizerTab = "polls" | "event" | "invite" | "tasks";
+
+export type ExpenseRow = {
+  id: string;
+  event_id: string;
+  created_by: string;
+  title: string;
+  amount: number;
+  note: string | null;
+  shared_with_all: boolean;
+  created_at: string;
+};
+
+export type ExpenseParticipantRow = {
+  expense_id: string;
+  user_id: string;
+};
